@@ -1,0 +1,197 @@
+export type Locale = "id" | "en";
+
+const english: Record<string, string> = {
+  "Ringkasan": "Overview", "Properti": "Properties", "Penyewa": "Tenants", "Sewa & Deposit": "Leases & Deposits",
+  "Tagihan": "Invoices", "Token PLN": "Electricity Tokens (PLN)", "Kontrak": "Contracts", "Template Pesan": "Message Templates",
+  "Pemeliharaan": "Maintenance", "Dokumen": "Documents", "Pengaturan": "Settings", "Operasional": "Operations",
+  "Hal yang perlu Anda tindak lanjuti hari ini.": "Items that need your attention today.",
+  "Pantau hunian dan operasional seluruh portofolio.": "Monitor occupancy and operations across your portfolio.",
+  "Data penyewa aktif, terdahulu, dan yang akan masuk.": "Manage current, former, and incoming tenants.",
+  "Kelola siklus sewa dan pergerakan uang jaminan.": "Manage lease lifecycles and security deposits.",
+  "Buat, kirim, dan rekonsiliasi pembayaran sewa.": "Create, send, and reconcile rental invoices.",
+  "Pesanan token listrik dan margin platform.": "PLN prepaid electricity token orders and platform fees.",
+  "Template dan kontrak sewa yang sudah dibuat.": "Rental agreement templates and generated contracts.",
+  "Pesan WhatsApp otomatis untuk setiap peristiwa.": "Automated WhatsApp messages for operational events.",
+  "Tindak lanjuti keluhan dan pekerjaan vendor.": "Track tenant issues and vendor work.",
+  "Arsip privat untuk kontrak, identitas, dan properti.": "Private records for contracts, Indonesian IDs, and properties.",
+  "Atur organisasi, penagihan, dan integrasi.": "Configure your organization, billing, and integrations.",
+  "aktivitas": "activity", "properti": "property", "penyewa": "tenant", "sewa": "lease", "tagihan": "invoice",
+  "pesanan": "order", "kontrak": "contract", "template": "template", "tiket": "ticket", "dokumen": "document", "pengaturan": "setting",
+  "Nama": "Name", "Tipe": "Type", "Lokasi": "Location", "Unit": "Unit", "Terisi": "Occupied", "Pendapatan": "Revenue",
+  "Mulai": "Start", "Status": "Status", "Periode": "Period", "Deposit": "Deposit", "Tahap": "Stage", "Pelanggan": "Customer",
+  "Override harga": "Override price", "Harga berasal dari unit. Aktifkan override hanya untuk reservasi ini.": "Pricing comes from the unit. Enable override for this reservation only.",
+  "Nomor meter": "Meter number", "Nominal": "Amount", "Biaya": "Fee", "Nomor": "Number", "Dibuat": "Created",
+  "Peristiwa": "Event", "Waktu": "Timing", "Saluran": "Channel", "Tiket": "Ticket", "Masalah": "Issue", "Vendor": "Vendor",
+  "Kategori": "Category", "Terkait": "Related to", "Diperbarui": "Updated", "Jatuh tempo": "Due date", "Total": "Total",
+  "Sisa": "Outstanding", "Aksi": "Actions", "Nama properti": "Property name", "Kota / lokasi": "City / location",
+  "Jumlah unit": "Number of units", "Unit terisi": "Occupied units", "Pendapatan bulanan": "Monthly revenue", "Nama lengkap": "Full name",
+  "Nomor WhatsApp": "WhatsApp number", "Properti dan unit": "Property and unit", "Tanggal mulai": "Start date",
+  "Periode sewa": "Lease period", "Sisa tagihan": "Outstanding amount", "Biaya platform": "Platform fee", "Nomor kontrak": "Contract number",
+  "Tanggal dibuat": "Date created", "Waktu kirim": "Send time", "Nomor tiket": "Ticket number", "Nama dokumen": "Document name",
+  "Terkait dengan": "Related to", "Tanggal": "Date", "Semua status": "All statuses", "Perlu tindakan": "Needs action",
+  "Cari data...": "Search records...", "Cari data": "Search records", "Filter status": "Filter by status",
+  "Tambah": "Add", "Edit": "Edit", "Hapus": "Delete", "Pilih": "Select", "Batal": "Cancel", "Simpan perubahan": "Save changes",
+  "Tambahkan": "Add", "Tutup": "Close", "Kembali ke properti": "Back to properties", "Belum ada data yang cocok": "No matching records",
+  "Aktif": "Active", "Nonaktif": "Inactive", "Dipesan": "Reserved", "Terdahulu": "Former", "Pesan": "Reservation",
+  "Masuk": "Move-in", "Keluar": "Move-out", "Selesai": "Completed", "Belum dibayar": "Unpaid", "Terlambat": "Overdue",
+  "Lunas": "Paid", "Menunggu bayar": "Awaiting payment", "Diproses": "Processing", "Token terkirim": "Token delivered",
+  "Draf": "Draft", "Menunggu tanda tangan": "Awaiting signature", "Ditandatangani": "Signed", "Baru": "New",
+  "Ditugaskan": "Assigned", "Dikerjakan": "In progress", "Privat": "Private", "Terverifikasi": "Verified",
+  "Dihuni": "Occupied", "Kosong": "Vacant", "Akan kosong": "Vacating soon", "Perawatan": "Under maintenance",
+  "Perlu perhatian": "Needs attention", "Belum ada": "Unassigned", "Standar": "Standard", "Deluxe": "Deluxe",
+  "Kos": "Kos (boarding house)", "Kontrakan": "Kontrakan (rental house)", "Ruko": "Ruko (shop-house)", "Apartemen": "Apartment",
+  "Identitas": "Identity document", "Lainnya": "Other", "KTP Siti Nurhaliza.jpg": "KTP (Indonesian ID card) - Siti Nurhaliza.jpg",
+  "Kontrak Ahmad Fauzi.pdf": "Rental contract - Ahmad Fauzi.pdf", "Kos Melati Residence": "Melati Kos (boarding house)",
+  "Paviliun Cempaka": "Cempaka rental house", "Ruko Wijaya": "Wijaya ruko (shop-house)", "Apartemen Arunika": "Arunika Apartment",
+  "Belum ditugaskan": "Unassigned", "AC tidak dingin": "Air conditioner is not cooling", "Keran bocor": "Leaking faucet",
+  "Lampu koridor mati": "Corridor light is out", "Pengingat sewa": "Rent reminder", "Jatuh tempo hari ini": "Due today",
+  "Pembayaran diterima": "Payment received", "Langsung": "Immediately", "Mei 2025": "May 2025", "Juni 2025": "June 2025", "Juli 2025": "July 2025",
+  "Dewi Lestari membayar Rp1.200.000": "Dewi Lestari paid IDR 1,200,000", "27 Juni 2025": "June 27, 2025",
+  "Tingkat hunian": "Occupancy rate", "+4% bulan ini": "+4% this month", "Tagihan diterima": "Invoices collected",
+  "89% tertagih": "89% collected", "Perlu ditagih": "Collection required", "6 tagihan": "6 invoices", "Tiket terbuka": "Open tickets",
+  "2 ditugaskan": "2 assigned", "Portofolio properti": "Property portfolio", "Hunian dan pendapatan bulan berjalan": "Current occupancy and monthly revenue",
+  "Lihat properti": "View properties", "Tagihan perlu tindakan": "Invoices requiring action", "Urut berdasarkan keterlambatan": "Sorted by overdue duration",
+  "Buka tagihan": "Open invoices", "Aktivitas terbaru": "Recent activity", "Hari ini": "Today", "Kemarin": "Yesterday",
+  "Kontrak perlu ditandatangani": "Contract awaiting signature", "Tiket baru": "New ticket", "Keran bocor di Unit 103": "Leaking faucet in Unit 103",
+  "Jadwal mendatang": "Upcoming schedule", "Kontrak berakhir": "Contract ends", "Jatuh tempo sewa": "Rent due",
+  "Total properti": "Total properties", "Total unit": "Total units", "Pendapatan bulan ini": "Revenue this month",
+  "Semua properti": "All properties", "Bagikan": "Share", "Buat pemesanan": "Create reservation", "Detail properti": "Property details",
+  "Fasilitas": "Amenities", "Harga & biaya": "Rates & fees", "Riwayat": "History", "Status hunian": "Occupancy status",
+  "Sewa per bulan": "Monthly rent", "Tunggakan": "Arrears", "Aktivitas unit": "Unit activity", "Inspeksi rutin selesai": "Routine inspection completed",
+  "Tidak ada kerusakan": "No damage found", "Tagihan Juni dibuat": "June invoice created", "Jatuh tempo 5 Juni": "Due June 5",
+  "Booking hingga move-in": "Reservation to move-in", "Nama calon penyewa": "Prospective tenant name", "Tanggal masuk": "Move-in date",
+  "Durasi": "Duration", "Catatan": "Notes", "12 bulan": "12 months", "Survei selesai. Membawa satu kendaraan.": "Viewing completed. Tenant has one vehicle.",
+  "Kontrak sewa": "Rental contract", "Kontrak Kos 12 Bulan": "12-month kos (boarding house) contract", "Sewa bulanan": "Monthly rent",
+  "Persiapan move-in": "Move-in preparation", "Deposit diterima": "Deposit received", "Transfer bank": "Bank transfer",
+  "Kontrak ditandatangani": "Contract signed", "Dokumen lengkap": "Documents complete", "Kunci diserahkan": "Keys handed over",
+  "2 set kunci": "2 sets of keys", "Penyewa siap masuk": "Tenant is ready to move in", "Simpan dan tutup": "Save and close",
+  "Selesaikan move-in": "Complete move-in", "Jatuh tempo 7 hari": "Due within 7 days", "Lunas bulan ini": "Paid this month",
+  "Detail unit": "Unit details", "Lantai": "Floor", "Tautan pembayaran": "Payment link", "Salin tautan": "Copy link",
+  "Kirim pengingat": "Send reminder", "Riwayat pembayaran": "Payment history", "Pembayaran transfer": "Bank transfer payment",
+  "Komersial": "Commercial", "Rumah": "House",
+  "Sebagian": "Partial", "Tagihan dibuat": "Invoice created", "Otomatis dari sewa aktif": "Generated from an active lease",
+  "Catat pembayaran penuh": "Record full payment", "Pembayaran sudah lunas": "Payment is already settled",
+  "Organisasi": "Organization", "Penagihan": "Billing", "Integrasi": "Integrations", "Pengguna": "Users", "Nama organisasi": "Organization name",
+  "Zona waktu": "Time zone", "Alamat": "Address", "Tanggal pembuatan tagihan": "Invoice creation date", "Jatuh tempo standar": "Standard due date",
+  "Pengingat pertama": "First reminder", "Pengingat terlambat": "Overdue reminder", "Mode simulasi": "Simulation mode",
+  "Tanggal 5": "The 5th of each month", "3 hari sebelum": "3 days before", "Setiap 3 hari": "Every 3 days",
+  "Pesan dicatat tanpa dikirim ke nomor asli": "Messages are logged without being sent to real phone numbers",
+  "Tautan pembayaran menggunakan data lokal": "Payment links use local test data", "Token PLN tidak diterbitkan secara nyata": "No real PLN electricity token is issued",
+  "Tes": "Test", "Pemilik": "Owner", "Admin": "Admin", "Simpan": "Save", "Lewati navigasi": "Skip navigation",
+  "Navigasi utama": "Primary navigation", "Pencarian global": "Global search", "Cari properti, penyewa, atau tagihan...": "Search properties, tenants, or invoices...",
+  "Jadwal": "Schedule", "Notifikasi": "Notifications", "Buka navigasi": "Open navigation", "Tutup navigasi": "Close navigation",
+  "Bahasa": "Language", "Indonesia": "Indonesian", "Inggris": "English", "Pemilik · PT Makmur": "Owner · PT Makmur",
+  "Ciutkan sidebar": "Collapse sidebar", "Perluas sidebar": "Expand sidebar",
+  "Buat Reservasi": "New Reservation",
+  "Semua": "All", "Terisi penuh": "Fully occupied", "unit kosong": "vacant units", "dari": "of", "bulan": "month",
+  "Buka detail": "Open details for", "Gambar belum tersedia": "Image not available", "Persentase unit kosong": "Vacancy percentage",
+  "Cari properti": "Search properties", "Cari properti...": "Search properties...", "Filter properti": "Property filters",
+  "Properti tidak ditemukan": "No properties found", "Ubah pencarian atau filter untuk melihat properti lain.": "Change the search or filters to view other properties.",
+  "Tambah properti": "Add property", "Edit properti": "Edit property", "Lengkapi identitas, struktur unit, dan ketentuan sewa.": "Complete the property details, unit structure, and rental terms.",
+  "Informasi properti": "Property information", "Penanggung jawab": "Contact person", "Nama dan nomor kontak": "Name and contact number",
+  "Nama penanggung jawab": "Contact name", "Nomor telepon": "Phone number",
+  "Label properti": "Property labels", "Ketik label lalu tekan Enter": "Type a label and press Enter", "Kosan": "Kosan (boarding house)",
+  "Struktur unit": "Unit structure", "Tipe unit": "Unit type", "Single unit": "Single unit", "Multi unit": "Multi-unit",
+  "Satu properti disewakan sebagai satu unit.": "The property is rented as one unit.", "Properti memiliki beberapa unit atau kamar.": "The property contains multiple units or rooms.",
+  "Prefix": "Prefix", "Nomor awal": "Starting number", "Jumlah unit / kamar": "Number of units / rooms", "Buat unit": "Generate units",
+  "unit siap dibuat": "units ready to create", "Periksa penomoran sebelum menyimpan.": "Review the numbering before saving.",
+  "Harga dan penagihan": "Pricing and billing", "Harga default": "Default price", "Deposit default": "Default deposit",
+  "Siklus penagihan": "Billing cycle", "Bulanan": "Monthly", "Tahunan": "Yearly", "Gambar properti": "Property image",
+  "Unggah gambar properti": "Upload a property image", "JPG, PNG, atau WebP. Maksimal 1 MB.": "JPG, PNG, or WebP. Maximum 1 MB.",
+  "Pratinjau gambar properti": "Property image preview", "Ukuran gambar maksimal 1 MB.": "The image must be 1 MB or smaller.",
+  "Tambahkan minimal satu label properti.": "Add at least one property label.", "Buat daftar unit sebelum menyimpan.": "Generate the unit list before saving.",
+  "Depok, Jawa Barat": "Depok, West Java", "Bandung, Jawa Barat": "Bandung, West Java", "Jakarta Selatan": "South Jakarta",
+  "Tangerang Selatan": "South Tangerang", "H-3, 09.00": "3 days before, 09:00", "H, 08.00": "On the due date, 08:00",
+  "Kontak": "Contact", "Hunian saat ini": "Current tenancy", "Lewat flow booking": "Via booking flow", "Belum ada sewa": "No tenancy",
+  "Ubah pencarian atau tambahkan penyewa baru.": "Change your search or add a new tenant.", "Semua penyewa": "All tenants", "Edit detail": "Edit details",
+  "Hubungi via WhatsApp": "Contact via WhatsApp", "Ringkasan penyewa": "Tenant overview", "Pembayaran": "Payments", "Dokumen penyewa": "Tenant documents",
+  "Status sewa saat ini": "Current tenancy status", "Penempatan unit hanya melalui flow booking.": "Unit assignment is only available through the booking flow.",
+  "Belum ada sewa aktif untuk penyewa ini.": "This tenant has no active tenancy.", "Buka properti untuk booking": "Open properties to book",
+  "Kontak darurat": "Emergency contact", "Kartu identitas": "ID card", "Nomor KTP / identitas": "KTP / identity number",
+  "Gambar hanya dapat diakses oleh pengguna berwenang.": "The image is only accessible to authorized users.", "tagihan ditemukan": "invoices found",
+  "Belum ada riwayat pembayaran.": "No payment history yet.", "Kontrak dan dokumen identitas": "Contracts and identity documents", "Hapus penyewa": "Delete tenant",
+  "Tambah penyewa": "Add tenant", "Edit penyewa": "Edit tenant", "Simpan kontak dan identitas penyewa tanpa menetapkan properti.": "Save the tenant's contact and identity details without assigning a property.",
+  "Penempatan unit dilakukan lewat booking": "Unit assignment happens through booking", "Buka detail properti dan pilih Buat pemesanan untuk menetapkan penyewa ke unit.": "Open a property and choose Create reservation to assign a tenant to a unit.",
+  "Detail kontak": "Contact details", "Nama kontak darurat": "Emergency contact name", "Nomor kontak darurat": "Emergency contact number",
+  "Unggah gambar kartu identitas": "Upload ID card image", "Ganti gambar kartu identitas": "Replace ID card image", "Pratinjau kartu identitas": "ID card preview",
+  "Unggah gambar kartu identitas.": "Upload an ID card image.",
+  "Penyewa sejak": "Tenant since", "Belum ada sewa aktif": "No active tenancy", "Sewa aktif": "Active leases",
+  "Total tagihan": "Total invoices", "Total dibayar": "Total paid", "Opsi lainnya": "More options",
+  "Ditetapkan melalui booking": "Assigned through booking", "Kontak & identitas": "Contact & identity",
+  "Reservasi": "Reservation", "Pilih unit": "Select a unit", "Pilih unit kosong": "Select a vacant unit",
+  "Tidak ada unit kosong di properti ini.": "No vacant units in this property.", "Penyewa terdaftar": "Existing tenant",
+  "Tambah penyewa baru": "Add new tenant", "Pilih penyewa": "Select a tenant",
+  "Belum ada calon penyewa. Tambahkan penyewa baru.": "No prospective tenants yet. Add a new tenant.",
+  "Lanjut: penyewa": "Next: tenant", "Lanjut: reservasi": "Next: reservation", "Buat reservasi": "Create reservation",
+  "Buat kontrak": "Create contract", "Kembali": "Back", "Pesan unit ini": "Book this unit",
+  "Belum ada unit": "No units yet", "Tambahkan unit pada properti ini untuk mulai membuat pemesanan.": "Add units to this property to start booking.",
+  "Lacak status setiap pemesanan dari booking hingga selesai.": "Track every reservation's status from booking to completion.", "reservasi": "reservation",
+  "Pesan unit untuk calon penyewa. Tahap kontrak hingga move-in dikelola di modul Reservasi.": "Book a unit for a prospective tenant. Contract through move-in is managed in the Reservasi module.",
+  "unit tersedia": "units available", "Penuh": "Full", "Tersedia": "Available", "Unit utama": "Main unit",
+  "Cari nama atau nomor penyewa...": "Search tenant name or number...", "Tidak ada penyewa cocok.": "No matching tenants.",
+  "Lengkapi unit dan penyewa terlebih dahulu.": "Complete the unit and tenant first.",
+  "Draf Kontrak": "Contract draft", "Kontrak Ditandatangani": "Contract signed", "Tidak Aktif": "Inactive", "Booking": "Booking",
+  "Akan berakhir": "Expiring soon", "≤ 30 hari": "≤ 30 days", "Kode": "Code", "Buka": "Open",
+  "Belum ada reservasi": "No reservations yet",
+  "Semua reservasi": "All reservations", "Status reservasi": "Reservation status", "Jalankan tahap berikutnya untuk reservasi ini.": "Run the next step for this reservation.",
+  "Reservasi dibuat. Buat draf kontrak untuk melanjutkan.": "Reservation created. Create a contract draft to continue.",
+  "Buat draf kontrak": "Create contract draft", "Jadwal masuk": "Move-in date", "Tandatangani kontrak": "Sign contract", "Konfirmasi move-in": "Confirm move-in",
+  "Penyewa aktif menempati unit ini.": "The tenant is actively occupying this unit.", "Akhiri sewa / move-out": "End lease / move-out",
+  "Reservasi selesai.": "Reservation completed.", "Jadwal keluar": "Move-out date", "Kontrak akan berakhir": "Contract ending soon", "Jadwalkan move-out": "Schedule move-out",
+  "Bagikan ke penyewa": "Share with tenant", "Unduh kontrak": "Download contract", "Pratinjau dokumen": "Preview document",
+  "Detail reservasi": "Reservation details", "Pratinjau kontrak": "Contract preview", "Kontrak Sewa": "Rental Contract",
+  "Dokumen ini dihasilkan oleh Sewain (mode simulasi).": "This document was generated by Sewain (simulation mode).",
+  "Tidak ada jadwal mendatang.": "No upcoming schedule.",
+};
+
+const months: Record<string, string> = { Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr", Mei: "May", Jun: "Jun", Jul: "Jul", Agu: "Aug", Sep: "Sep", Okt: "Oct", Nov: "Nov", Des: "Dec" };
+
+export function translate(locale: Locale, value: string) {
+  return locale === "en" ? english[value] ?? value : value;
+}
+
+export function localizeValue(locale: Locale, value: unknown): string {
+  const text = String(value ?? "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${text}T00:00:00Z`));
+  }
+  if (locale === "id") return text;
+  if (english[text]) return english[text];
+  const labels = text.split(", ");
+  if (labels.length > 1 && labels.every(label => english[label])) return labels.map(label => english[label]).join(", ");
+  if (/^Rp[\d.]+$/.test(text)) return `IDR ${text.slice(2).replace(/\./g, ",")}`;
+  const millions = text.match(/^Rp([\d]+),([\d]+) jt$/);
+  if (millions) return `IDR ${millions[1]}.${millions[2]}M`;
+  return text
+    .replace(/\b(Mei|Juni|Juli|Agu|Okt|Des)\b/g, month => ({ Juni: "June", Juli: "July", ...months } as Record<string, string>)[month] ?? month)
+    .replace(/\bJawa Barat\b/g, "West Java")
+    .replace(/\bJakarta Selatan\b/g, "South Jakarta")
+    .replace(/\bTangerang Selatan\b/g, "South Tangerang")
+    .replace(/\bBelum dibayar\b/g, "Unpaid")
+    .replace(/\bKos\b/g, "Kos (boarding house)");
+}
+
+export function message(locale: Locale, id: string, values: Record<string, string | number> = {}) {
+  const catalog: Record<string, [string, string]> = {
+    removed: ["{item} dihapus. Perubahan tersimpan di perangkat ini.", "{item} deleted. Changes are saved on this device."],
+    saved: ["{item} berhasil disimpan.", "{item} saved successfully."],
+    stage: ["Tahap diperbarui menjadi {stage}.", "Stage updated to {stage}."],
+    unitRemoved: ["Unit {unit} dihapus.", "Unit {unit} deleted."],
+    reminder: ["Pengingat WhatsApp dikirim ke {name}.", "WhatsApp reminder sent to {name}."],
+    paid: ["Pembayaran {invoice} dicatat dan tanda terima dibuat.", "Payment for {invoice} recorded and a receipt was created."],
+    settings: ["Pengaturan {section} disimpan.", "{section} settings saved."],
+    reservationCreated: ["Reservasi dibuat untuk {name} di {unit}.", "Reservation created for {name} in {unit}."],
+    contractCreated: ["Kontrak {number} dibuat dan disimpan ke Dokumen.", "Contract {number} created and saved to Documents."],
+    moveInDone: ["Move-in selesai. {unit} sekarang dihuni dan tagihan pertama dibuat.", "Move-in completed. {unit} is now occupied and the first invoice was created."],
+    draftCreated: ["Draf kontrak {number} dibuat.", "Contract draft {number} created."],
+    contractSigned: ["Kontrak ditandatangani. Jadwal masuk {date}.", "Contract signed. Move-in scheduled for {date}."],
+    moveOutScheduled: ["Pengingat move-out {date} dikirim ke {name}.", "Move-out reminder for {date} sent to {name}."],
+    reservationEnded: ["Sewa diakhiri. {unit} kembali kosong.", "Lease ended. {unit} is vacant again."],
+    contractShared: ["Kontrak dibagikan ke {name} via WhatsApp.", "Contract shared with {name} via WhatsApp."],
+    contractDownloaded: ["Kontrak {code} diunduh.", "Contract {code} downloaded."],
+    expirySoon: ["Kontrak berakhir dalam {days} hari. Jadwalkan move-out.", "Contract ends in {days} days. Schedule the move-out."],
+  };
+  let result = catalog[id]?.[locale === "en" ? 1 : 0] ?? id;
+  for (const [key, value] of Object.entries(values)) result = result.replace(`{${key}}`, String(value));
+  return result;
+}

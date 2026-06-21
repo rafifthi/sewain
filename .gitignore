@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.pnpm-store/
+*.tsbuildinfo
+
+# Local environment files
+.env*
+!.env.example
+
+# OS and editor files
+.DS_Store
+*.log
