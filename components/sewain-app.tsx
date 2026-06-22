@@ -12,12 +12,21 @@ import { Locale, localizeValue, message, translate } from "@/lib/i18n";
 import { calcFee, defaultTokenConfig, formatRp, PropertyFeeRule, TokenConfig } from "@/lib/utility-token-config";
 import {
   eventDescription, eventLabel, eventTiming, findEvent, MessageEvent, MessageTemplate,
-  ORG_CONSTANTS, renderPreview, sampleValues, SEED_TEMPLATES, TemplateOption, variableLabel, VariableDef,
+  ORG_CONSTANTS, renderPreview, SEED_TEMPLATES, slugifyToken, TemplateOption, variableLabel, VariableDef,
 } from "@/lib/message-templates";
 
 type PageId = "dashboard" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 type DialogState = null | { mode: "create" | "edit"; page: PageId; row?: Row };
 type BookingState = { propertyId?: string; unitId?: string };
+type NotificationItem = {
+  id: string;
+  page: PageId;
+  rowId: string;
+  kind: "payment" | "reminder" | "maintenance" | "contract";
+  title: string;
+  description: string;
+  time: string;
+};
 
 type I18nState = { locale: Locale; setLocale: (locale: Locale) => void; t: (value: string) => string; v: (value: unknown) => string };
 const I18nContext = createContext<I18nState>({ locale: "id", setLocale: () => {}, t: value => value, v: value => String(value ?? "") });
@@ -54,6 +63,13 @@ const pageMeta: Record<PageId, { title: string; description: string; singular: s
   documents: { title: "Dokumen", description: "Arsip privat untuk kontrak, identitas, dan properti.", singular: "dokumen" },
   settings: { title: "Pengaturan", description: "Atur organisasi, penagihan, dan integrasi.", singular: "pengaturan" },
 };
+
+const notificationItems: NotificationItem[] = [
+  { id: "payment-in", page: "invoices", rowId: "INV-0525-0062", kind: "payment", title: "Pembayaran masuk", description: "Dewi Lestari membayar Rp1.200.000", time: "2 menit lalu" },
+  { id: "invoice-due", page: "invoices", rowId: "INV-0625-0090", kind: "reminder", title: "Tagihan jatuh tempo hari ini", description: "Ahmad Fauzi · Melati 101 · Rp1.200.000", time: "18 menit lalu" },
+  { id: "wa-maintenance", page: "tickets", rowId: "x2", kind: "maintenance", title: "Keluhan baru dari WA bot", description: "Keran wastafel terus bocor · Unit 103", time: "42 menit lalu" },
+  { id: "contract-signature", page: "contracts", rowId: "k2", kind: "contract", title: "Kontrak perlu ditandatangani", description: "M. Iqbal Maulana · KTR-2025-044", time: "1 jam lalu" },
+];
 
 type FormFieldSchema = { key: string; label: string; type?: React.HTMLInputTypeAttribute; options?: string[]; multiline?: boolean; inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"] };
 
@@ -229,9 +245,11 @@ const isExpiringSoon = (r: Row, withinDays = 30) => String(r.status) === "Aktif"
 function Status({ children }: { children: React.ReactNode }) {
   const { v } = useI18n();
   const value = String(children);
-  const state = /aktif|lunas|dihuni|selesai|terkirim|ditandatangani|terverifikasi/i.test(value) ? "success" :
+  const state = /tidak aktif|tidak|nonaktif|belum ada sewa/i.test(value) ? "" :
+    /aktif|lunas|dihuni|selesai|terkirim|ditandatangani|terverifikasi/i.test(value) ? "success" :
     /terlambat|perawatan|perlu perhatian/i.test(value) ? "danger" :
-    /jatuh|dipesan|booking|kontrak|menunggu|ditugaskan|akan kosong|draf|diproses|dikonfirmasi|token siap/i.test(value) ? "warning" : "";
+    /\bbooking\b/i.test(value) ? "info" :
+    /jatuh|dipesan|kontrak|menunggu|ditugaskan|akan kosong|draf|diproses|dikonfirmasi|token siap/i.test(value) ? "warning" : "";
   return <span className={`badge ${state} ${slug(value)}`}>{v(value)}</span>;
 }
 
@@ -345,6 +363,25 @@ const vendorDirectory: Row[] = [
 
 type TicketMenuState = { row: Row; x: number; y: number } | null;
 type VendorAssignmentState = { ticketId: string; ticketNumber: string } | null;
+type TicketDragPreviewState = { row: Row; x: number; y: number; width: number; height: number; offsetX: number; offsetY: number } | null;
+
+function TicketTimestamps({ row }: { row: Row }) {
+  const { locale } = useI18n();
+  const entries = [
+    { key: "created", label: locale === "en" ? "Created" : "Dibuat", value: row.createdAt, icon: CalendarPlus },
+    { key: "assigned", label: locale === "en" ? "Assigned" : "Ditugaskan", value: row.assignedAt, icon: UserCheck },
+  ].filter(entry => entry.value);
+
+  if (!entries.length) return <div className="ticket-timestamps empty-timestamps"><CalendarClock /><span>{locale === "en" ? "Time not recorded" : "Waktu belum tercatat"}</span></div>;
+
+  return <div className="ticket-timestamps">{entries.map(entry => {
+    const date = new Date(String(entry.value));
+    if (Number.isNaN(date.getTime())) return null;
+    const compact = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
+    const full = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "id-ID", { dateStyle: "long", timeStyle: "short" }).format(date);
+    return <span key={entry.key} title={`${entry.label}: ${full}`}><entry.icon /><span><small>{entry.label}</small><time dateTime={date.toISOString()}>{compact}</time></span></span>;
+  })}</div>;
+}
 
 function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
@@ -352,6 +389,7 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
   const [tab, setTab] = useState<"board" | "vendors">("board");
   const [search, setSearch] = useState("");
   const [dragged, setDragged] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<TicketDragPreviewState>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
   const [menu, setMenu] = useState<TicketMenuState>(null);
   const [vendorAssignment, setVendorAssignment] = useState<VendorAssignmentState>(null);
@@ -363,8 +401,26 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
   const [vendorLabelInput, setVendorLabelInput] = useState("");
   const holdTimer = useRef<number | null>(null);
   const heldRef = useRef(false);
+  const pressRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number; card: HTMLElement; pointerId: number; pointerType: string; row: Row; offsetX: number; offsetY: number } | null>(null);
+  const movedBeforeHoldRef = useRef(false);
   const dropStageRef = useRef<string | null>(null);
   const filtered = rows.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(search.toLowerCase())));
+  useEffect(() => {
+    const seedTickets = moduleData.tickets;
+    setRows(current => {
+      let changed = false;
+      const next = current.map(row => {
+        const seed = seedTickets.find(ticket => ticket.id === row.id);
+        if (!seed) return row;
+        const createdAt = row.createdAt || seed.createdAt;
+        const assignedAt = row.assignedAt || seed.assignedAt;
+        if (createdAt === row.createdAt && assignedAt === row.assignedAt) return row;
+        changed = true;
+        return { ...row, createdAt, assignedAt };
+      });
+      return changed ? next : current;
+    });
+  }, [setRows]);
   const updateTicket = (id: string, patch: Record<string, string | number>) => setRows(current => current.map(row => row.id === id ? { ...row, ...patch } : row));
   const move = (id: string, status: string) => {
     const ticket = rows.find(row => row.id === id);
@@ -372,21 +428,24 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
       setVendorAssignment({ ticketId: id, ticketNumber: String(ticket.tiket) });
       setSelectedVendor(ticket.vendor === "Belum ditugaskan" ? "" : String(ticket.vendor || ""));
       setDragged(null);
+      setDragPreview(null);
       setDropStage(null);
       dropStageRef.current = null;
       setMenu(null);
       return;
     }
-    updateTicket(id, { status });
+    updateTicket(id, { status, ...(status === "Ditugaskan" && !ticket?.assignedAt ? { assignedAt: new Date().toISOString() } : {}) });
     notify(locale === "en" ? `Ticket moved to ${t(status)}.` : `Tiket dipindahkan ke ${status}.`);
     setDragged(null);
+    setDragPreview(null);
     setDropStage(null);
     dropStageRef.current = null;
     setMenu(null);
   };
   const assignVendor = () => {
     if (!vendorAssignment || !selectedVendor) return;
-    updateTicket(vendorAssignment.ticketId, { status: "Ditugaskan", vendor: selectedVendor });
+    const ticket = rows.find(row => row.id === vendorAssignment.ticketId);
+    updateTicket(vendorAssignment.ticketId, { status: "Ditugaskan", vendor: selectedVendor, assignedAt: ticket?.assignedAt || new Date().toISOString() });
     notify(locale === "en" ? `${vendorAssignment.ticketNumber} assigned to ${selectedVendor}.` : `${vendorAssignment.ticketNumber} ditugaskan ke ${selectedVendor}.`);
     setVendorAssignment(null);
     setSelectedVendor("");
@@ -411,20 +470,49 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
     notify(locale === "en" ? `${vendorForm.nama} added to the vendor directory.` : `${vendorForm.nama} ditambahkan ke daftar vendor.`);
   };
   const cancelHold = () => { if (holdTimer.current) window.clearTimeout(holdTimer.current); holdTimer.current = null; };
+  const activateDrag = (press: NonNullable<typeof pressRef.current>) => {
+    if (heldRef.current || !press.card.isConnected) return;
+    cancelHold();
+    const rect = press.card.getBoundingClientRect();
+    heldRef.current = true;
+    setDragged(press.row.id);
+    setDragPreview({ row: press.row, x: press.currentX - press.offsetX, y: press.currentY - press.offsetY, width: rect.width, height: rect.height, offsetX: press.offsetX, offsetY: press.offsetY });
+  };
   const beginHold = (event: React.PointerEvent, row: Row) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button, select, input")) return;
     const card = event.currentTarget as HTMLElement;
     const pointerId = event.pointerId;
+    const rect = card.getBoundingClientRect();
+    pressRef.current = { startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY, card, pointerId, pointerType: event.pointerType, row, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
     heldRef.current = false;
+    movedBeforeHoldRef.current = false;
     cancelHold();
-    holdTimer.current = window.setTimeout(() => {
-      heldRef.current = true;
-      setDragged(row.id);
-      if (card.isConnected) card.setPointerCapture(pointerId);
-    }, 350);
+    card.setPointerCapture(pointerId);
+    if (event.pointerType !== "mouse") holdTimer.current = window.setTimeout(() => {
+      const press = pressRef.current;
+      if (press) activateDrag(press);
+    }, 300);
   };
   const trackHold = (event: React.PointerEvent) => {
-    if (!heldRef.current) return;
+    const press = pressRef.current;
+    if (press) {
+      press.currentX = event.clientX;
+      press.currentY = event.clientY;
+    }
+    if (!heldRef.current) {
+      const deltaX = press ? Math.abs(event.clientX - press.startX) : 0;
+      const deltaY = press ? Math.abs(event.clientY - press.startY) : 0;
+      if (press?.pointerType === "mouse" && Math.hypot(deltaX, deltaY) > 4) {
+        activateDrag(press);
+        return;
+      }
+      if (press?.pointerType !== "mouse" && deltaY > 18 && deltaY > deltaX * 1.25) {
+        movedBeforeHoldRef.current = true;
+        cancelHold();
+      }
+      return;
+    }
+    setDragPreview(current => current ? { ...current, x: event.clientX - current.offsetX, y: event.clientY - current.offsetY } : current);
     const column = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-ticket-stage]");
     const nextStage = column?.dataset.ticketStage || null;
     dropStageRef.current = nextStage;
@@ -433,12 +521,16 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
   const endHold = (event: React.PointerEvent, row: Row) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button, select, input")) return;
     cancelHold();
+    const press = pressRef.current;
+    if (press?.card.hasPointerCapture(press.pointerId)) press.card.releasePointerCapture(press.pointerId);
+    pressRef.current = null;
     if (heldRef.current) {
       if (dropStageRef.current && dropStageRef.current !== row.status) move(row.id, dropStageRef.current);
-      else { setDragged(null); setDropStage(null); dropStageRef.current = null; }
+      else { setDragged(null); setDragPreview(null); setDropStage(null); dropStageRef.current = null; }
       window.setTimeout(() => { heldRef.current = false; }, 0);
       return;
     }
+    if (movedBeforeHoldRef.current) return;
     openDialog({ mode: "edit", page: "tickets", row });
   };
   const toggleLabel = (row: Row, label: string) => {
@@ -459,12 +551,12 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
       {ticketStages.map(stage => {
         const stageRows = filtered.filter(row => row.status === stage);
         return <section className={`kanban-column ${dragged ? "drag-active" : ""} ${dropStage === stage ? "drop-target" : ""}`} data-ticket-stage={stage} key={stage}>
-          <header className="kanban-column-head"><span className={`stage-indicator ${slug(stage)}`} /><h2>{t(stage)}</h2><span className="kanban-count">{stageRows.length}</span></header>
+          <header className={`kanban-column-head ${slug(stage)}`}><span className={`stage-indicator ${slug(stage)}`} /><h2>{t(stage)}</h2><span className="kanban-count">{stageRows.length}</span></header>
           <div className="kanban-stack">
             {stageRows.map(row => {
               const proofs = String(row.bukti || "").split("|").filter(Boolean);
               const labels = String(row.labels || "").split("|").filter(Boolean);
-              return <article className={`ticket-card ${dragged === row.id ? "dragging" : ""}`} key={row.id} role="button" tabIndex={0} aria-label={`${row.tiket}: ${v(row.judul || row.masalah)}`} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDialog({ mode: "edit", page: "tickets", row }); } }} onPointerDown={event => beginHold(event, row)} onPointerMove={trackHold} onPointerUp={event => endHold(event, row)} onPointerCancel={() => { cancelHold(); setDragged(null); setDropStage(null); dropStageRef.current = null; }} onContextMenu={event => { event.preventDefault(); cancelHold(); setMenu({ row, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 276)), y: Math.max(12, Math.min(event.clientY, window.innerHeight - 460)) }); }}>
+              return <article className={`ticket-card ${dragged === row.id ? "drag-source" : ""}`} key={row.id} role="button" tabIndex={0} aria-label={`${row.tiket}: ${v(row.judul || row.masalah)}`} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDialog({ mode: "edit", page: "tickets", row }); } }} onPointerDown={event => beginHold(event, row)} onPointerMove={trackHold} onPointerUp={event => endHold(event, row)} onPointerCancel={() => { cancelHold(); heldRef.current = false; movedBeforeHoldRef.current = false; setDragged(null); setDragPreview(null); setDropStage(null); pressRef.current = null; dropStageRef.current = null; }} onContextMenu={event => { event.preventDefault(); cancelHold(); pressRef.current = null; setMenu({ row, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 276)), y: Math.max(12, Math.min(event.clientY, window.innerHeight - 460)) }); }}>
                 <div className="ticket-card-top"><span className="ticket-id"><GripVertical />{row.tiket}</span><button className="icon-button" aria-label={`${locale === "en" ? "Actions for" : "Aksi untuk"} ${row.tiket}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ row, x: Math.max(8, Math.min(rect.right, window.innerWidth - 276)), y: Math.max(12, Math.min(rect.bottom + 4, window.innerHeight - 460)) }); }}><MoreHorizontal /></button></div>
                 <div className="ticket-title">{v(row.judul || row.masalah)}</div>
                 <div className="ticket-location"><MapPin /> <span>{v(row.properti || "Kos Melati Residence")} · {v(row.unit)}</span></div>
@@ -472,6 +564,7 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
                 {proofs.length > 0 && <div className="proof-strip">{proofs.slice(0, 3).map((src, index) => <img key={index} src={src} alt={`${locale === "en" ? "Issue proof" : "Bukti masalah"} ${index + 1}`} />)}{proofs.length > 3 && <span>+{proofs.length - 3}</span>}</div>}
                 <div className="ticket-person"><span className="avatar small">{String(row.penyewa || "NA").split(" ").map(part => part[0]).slice(0, 2).join("")}</span><span><strong>{v(row.penyewa || "Belum ada")}</strong><small>{v(row.telepon || "-")}</small></span></div>
                 {labels.length > 0 && <div className="ticket-labels">{labels.map(label => <span key={label}>{v(label)}</span>)}</div>}
+                <TicketTimestamps row={row} />
                 <div className="ticket-footer"><span className={`vendor-chip ${row.vendor === "Belum ditugaskan" ? "unassigned" : ""}`}><Wrench />{v(row.vendor)}</span>{row.dueDate && <span className="ticket-due"><CalendarClock />{v(row.dueDate)}</span>}</div>
               </article>;
             })}
@@ -479,7 +572,7 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
           </div>
         </section>;
       })}
-    </div></>}
+    </div>{dragPreview && <TicketDragPreview preview={dragPreview} />}</>}
     {tab === "vendors" && !vendorDetail && <section className="panel vendor-directory"><div className="panel-head"><div><h2>{locale === "en" ? "Vendor directory" : "Daftar vendor"}</h2><p>{locale === "en" ? "Maintenance partners available for ticket assignment" : "Mitra pemeliharaan yang dapat ditugaskan ke tiket"}</p></div><div className="actions"><span className="vendor-total">{vendors.length} vendor</span><button className="button primary" onClick={openVendorForm}><Plus />{locale === "en" ? "Add vendor" : "Tambah vendor"}</button></div></div><div className="table-wrap"><table><thead><tr><th>{locale === "en" ? "Vendor" : "Nama vendor"}</th><th>{locale === "en" ? "Contact person" : "Kontak"}</th><th>Label</th><th>{locale === "en" ? "City" : "Kota"}</th><th>{t("Nomor WhatsApp")}</th><th>{locale === "en" ? "Open tickets" : "Tiket aktif"}</th><th>{t("Status")}</th></tr></thead><tbody>{vendors.map(vendor => { const activeTickets = rows.filter(row => row.vendor === vendor.nama && row.status !== "Selesai").length; const labels = String(vendor.labels || "").split("|").filter(Boolean); return <tr className="vendor-row" key={vendor.id} tabIndex={0} onClick={() => setVendorDetail(vendor)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setVendorDetail(vendor); } }}><td><span className="vendor-name"><span className="vendor-avatar"><Wrench /></span><strong>{vendor.nama}</strong></span></td><td>{v(vendor.kontak)}</td><td><div className="vendor-labels">{labels.map(label => <span key={label}>{v(label)}</span>)}</div></td><td>{v(vendor.kota)}</td><td><a className="link" href={`https://wa.me/62${String(vendor.telepon).replace(/\D/g, "").replace(/^0/, "")}`} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}>{vendor.telepon}</a></td><td>{activeTickets}</td><td><Status>{vendor.status}</Status></td></tr>; })}</tbody></table></div></section>}
     {tab === "vendors" && vendorDetail && <VendorDetail vendor={vendorDetail} tickets={rows.filter(row => row.vendor === vendorDetail.nama)} onBack={() => setVendorDetail(null)} />}
     {menu && <><button className="context-dismiss" aria-label={locale === "en" ? "Close ticket actions" : "Tutup aksi tiket"} onClick={() => setMenu(null)} onContextMenu={event => { event.preventDefault(); setMenu(null); }} /><div className="ticket-context" role="menu" aria-label={`${locale === "en" ? "Actions for" : "Aksi untuk"} ${menu.row.tiket}`} style={{ left: menu.x, top: menu.y }} onPointerDown={event => event.stopPropagation()}>
@@ -493,6 +586,22 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
     {vendorAssignment && <div className="backdrop vendor-assignment-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && setVendorAssignment(null)}><div className="dialog vendor-assignment-dialog" role="dialog" aria-modal="true" aria-labelledby="vendor-assignment-title"><div className="dialog-head"><div><span className="eyebrow">{vendorAssignment.ticketNumber}</span><h2 id="vendor-assignment-title">{locale === "en" ? "Assign a vendor" : "Pilih vendor"}</h2><p>{locale === "en" ? "A vendor is required before moving this ticket to Assigned." : "Vendor wajib dipilih sebelum tiket dipindahkan ke Ditugaskan."}</p></div><button className="icon-button" aria-label={t("Tutup")} onClick={() => setVendorAssignment(null)}><X /></button></div><div className="dialog-body"><div className="vendor-options" role="radiogroup" aria-label={locale === "en" ? "Available vendors" : "Vendor tersedia"}>{vendors.map(vendor => <label className={selectedVendor === vendor.nama ? "selected" : ""} key={vendor.id}><input type="radio" name="vendor" value={String(vendor.nama)} checked={selectedVendor === vendor.nama} onChange={() => setSelectedVendor(String(vendor.nama))} /><span className="vendor-avatar"><Wrench /></span><span><strong>{vendor.nama}</strong><small>{String(vendor.labels || "").split("|").join(", ")} · {v(vendor.kota)}</small></span><Check /></label>)}</div></div><div className="dialog-actions"><button className="button" onClick={() => setVendorAssignment(null)}>{t("Batal")}</button><button className="button primary" disabled={!selectedVendor} onClick={assignVendor}>{locale === "en" ? "Assign and move" : "Tugaskan dan pindahkan"}</button></div></div></div>}
     {vendorDialog && <div className="backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && setVendorDialog(false)}><form className="dialog vendor-form-dialog" role="dialog" aria-modal="true" aria-labelledby="vendor-form-title" onSubmit={saveVendor}><div className="dialog-head"><div><h2 id="vendor-form-title">{locale === "en" ? "Add vendor" : "Tambah vendor"}</h2><p>{locale === "en" ? "Add the vendor's business and primary contact details." : "Tambahkan informasi usaha dan kontak utama vendor."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={() => setVendorDialog(false)}><X /></button></div><div className="dialog-body"><div className="form-grid"><div className="form-field full"><label htmlFor="vendor-name">{locale === "en" ? "Vendor name" : "Nama vendor"}</label><input id="vendor-name" autoComplete="organization" value={vendorForm.nama} onChange={event => setVendorForm(current => ({ ...current, nama: event.target.value }))} required /></div><div className="form-field"><label htmlFor="vendor-contact">{locale === "en" ? "Contact person" : "Nama kontak"}</label><input id="vendor-contact" autoComplete="name" value={vendorForm.kontak} onChange={event => setVendorForm(current => ({ ...current, kontak: event.target.value }))} required /></div><div className="form-field"><label htmlFor="vendor-phone">{locale === "en" ? "Contact number" : "Nomor kontak"}</label><input id="vendor-phone" type="tel" inputMode="tel" autoComplete="tel" pattern="[0-9+()\s-]{8,20}" value={vendorForm.telepon} onChange={event => setVendorForm(current => ({ ...current, telepon: event.target.value }))} required /></div><div className="form-field full"><label htmlFor="vendor-label">Label</label><div className="tag-input">{vendorLabels.map(label => <span className="property-tag" key={label}>{label}<button type="button" aria-label={`${t("Hapus")} ${label}`} onClick={() => setVendorLabels(current => current.filter(item => item !== label))}><X /></button></span>)}<input id="vendor-label" value={vendorLabelInput} onChange={event => setVendorLabelInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addVendorLabel(); } }} onBlur={() => addVendorLabel()} placeholder={locale === "en" ? "Type a label, then press Enter" : "Ketik label, lalu tekan Enter"} /></div><div className="tag-suggestions">{["AC", "HVAC", "Listrik", "Plumbing", "Furnitur"].filter(label => !vendorLabels.includes(label)).map(label => <button type="button" key={label} onClick={() => addVendorLabel(label)}>+ {label}</button>)}</div></div><div className="form-field full"><label htmlFor="vendor-city">{locale === "en" ? "City" : "Kota"}</label><input id="vendor-city" autoComplete="address-level2" value={vendorForm.kota} onChange={event => setVendorForm(current => ({ ...current, kota: event.target.value }))} required /></div></div></div><div className="dialog-actions"><button type="button" className="button" onClick={() => setVendorDialog(false)}>{t("Batal")}</button><button type="submit" className="button primary" disabled={!vendorLabels.length}>{locale === "en" ? "Add vendor" : "Tambah vendor"}</button></div></form></div>}
   </>;
+}
+
+function TicketDragPreview({ preview }: { preview: Exclude<TicketDragPreviewState, null> }) {
+  const { locale, v } = useI18n();
+  const row = preview.row;
+  const labels = String(row.labels || "").split("|").filter(Boolean);
+  return <div className="ticket-drag-preview" aria-hidden="true" style={{ width: preview.width, minHeight: preview.height, transform: `translate3d(${preview.x}px, ${preview.y}px, 0) rotate(.6deg) scale(1.02)` }}>
+    <div className="ticket-card-top"><span className="ticket-id"><GripVertical />{row.tiket}</span><span className="drag-status">{locale === "en" ? "Moving" : "Memindahkan"}</span></div>
+    <div className="ticket-title">{v(row.judul || row.masalah)}</div>
+    <div className="ticket-location"><MapPin /><span>{v(row.properti || "Kos Melati Residence")} · {v(row.unit)}</span></div>
+    <p className="ticket-issue">{String(v(row.masalah)).replace(/[*#_`>-]/g, "").replace(/\n+/g, " ")}</p>
+    <div className="ticket-person"><span className="avatar small">{String(row.penyewa || "NA").split(" ").map(part => part[0]).slice(0, 2).join("")}</span><span><strong>{v(row.penyewa || "Belum ada")}</strong><small>{v(row.telepon || "-")}</small></span></div>
+    {labels.length > 0 && <div className="ticket-labels">{labels.map(label => <span key={label}>{v(label)}</span>)}</div>}
+    <TicketTimestamps row={row} />
+    <div className="ticket-footer"><span className={`vendor-chip ${row.vendor === "Belum ditugaskan" ? "unassigned" : ""}`}><Wrench />{v(row.vendor)}</span>{row.dueDate && <span className="ticket-due"><CalendarClock />{v(row.dueDate)}</span>}</div>
+  </div>;
 }
 
 function VendorDetail({ vendor, tickets, onBack }: { vendor: Row; tickets: Row[]; onBack: () => void }) {
@@ -707,7 +816,7 @@ type ReservationsPageProps = {
   rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>;
   units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>;
   tenants: Row[]; setTenants: React.Dispatch<React.SetStateAction<Row[]>>;
-  setProperties: React.Dispatch<React.SetStateAction<Row[]>>;
+  properties: Row[]; setProperties: React.Dispatch<React.SetStateAction<Row[]>>;
   setContracts: React.Dispatch<React.SetStateAction<Row[]>>;
   setDocuments: React.Dispatch<React.SetStateAction<Row[]>>;
   setInvoices: React.Dispatch<React.SetStateAction<Row[]>>;
@@ -748,7 +857,7 @@ function ReservationsPage(props: ReservationsPageProps) {
     </section></>;
 }
 
-function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenants, setTenants, setProperties, setContracts, setDocuments, setInvoices, notify, onBack }: ReservationsPageProps & { reservation: Row; onBack: () => void }) {
+function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenants, setTenants, properties, setProperties, setContracts, setDocuments, setInvoices, notify, onBack }: ReservationsPageProps & { reservation: Row; onBack: () => void }) {
   const { locale, t, v } = useI18n();
   const endDate = reservationEndDate(reservation.periode);
   const [moveInDate, setMoveInDate] = useState(todayInput());
@@ -757,11 +866,67 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
   const [showPreview, setShowPreview] = useState(false);
   void rows;
 
-  const tenant = tenants.find(tn => tn.id === reservation._tenantId) || tenants.find(tn => tn.nama === reservation.penyewa);
   const status = String(reservation.status);
   const rank = statusRank(status);
+  const editable = rank < 2; // editable while still a draft (Booking / Draf Kontrak)
   const expiring = isExpiringSoon(reservation);
   const update = (patch: Record<string, string | number>) => setRows(old => old.map(r => r.id === reservation.id ? { ...r, ...patch } : r));
+
+  // Resolve the reservation's links (seeded rows have no _propertyId/_unitId/_tenantId — fall back to name/label matching).
+  const currentPropertyId = String(reservation._propertyId || properties.find(p => p.nama === reservation.properti)?.id || "");
+  const currentProperty = properties.find(p => p.id === currentPropertyId);
+  const currentUnitId = String(reservation._unitId || unitsForProperty(units, currentProperty).find(u => unitLabelFor(currentProperty, u) === reservation.unit)?.id || "");
+  const currentTenantId = String(reservation._tenantId || tenants.find(tn => tn.nama === reservation.penyewa)?.id || "");
+  const tenant = tenants.find(tn => tn.id === currentTenantId);
+
+  // Draft editing — fields stay editable until the contract is signed.
+  const [propertyId, setPropertyId] = useState(currentPropertyId);
+  const [unitId, setUnitId] = useState(currentUnitId);
+  const [tenantId, setTenantId] = useState(currentTenantId);
+  const [duration, setDuration] = useState(String(reservation.durasi || "12 bulan"));
+  const [rent, setRent] = useState(String(rupiah(reservation.sewa)));
+  const [deposit, setDeposit] = useState(String(rupiah(reservation.deposit)));
+  const [notes, setNotes] = useState(String(reservation._notes || ""));
+  const [showTenantForm, setShowTenantForm] = useState(false);
+
+  const editProperty = properties.find(p => p.id === propertyId);
+  const editUnits = unitsForProperty(units, editProperty);
+  const availableCount = (p?: Row) => unitsForProperty(units, p).filter(isVacant).length;
+  const isUnitSelectable = (u: Row) => isVacant(u) || u.id === currentUnitId;
+  const prospects = tenants.filter(tn => !tn.unit || tn.id === currentTenantId);
+  const editTenant = tenants.find(tn => tn.id === tenantId);
+  const tenantOptions = editTenant && !prospects.some(p => p.id === tenantId) ? [editTenant, ...prospects] : prospects;
+  const changeEditProperty = (pid: string) => { const p = properties.find(x => x.id === pid); const vac = unitsForProperty(units, p).filter(isVacant); setPropertyId(pid); setUnitId(vac[0]?.id ?? ""); setRent(String(unitRent(vac[0], p))); setDeposit(String(unitDeposit(vac[0], p))); };
+
+  const saveDraft = () => {
+    const prop = properties.find(p => p.id === propertyId);
+    const newUnit = unitsForProperty(units, prop).find(u => u.id === unitId);
+    const newTenant = tenants.find(tn => tn.id === tenantId);
+    if (!prop || !newUnit || !newTenant) { notify(t("Lengkapi unit dan penyewa terlebih dahulu.")); return; }
+    const label = unitLabelFor(prop, newUnit);
+    const unitChanged = currentUnitId !== newUnit.id;
+    const tenantChanged = currentTenantId !== newTenant.id;
+
+    if (unitChanged) {
+      let base = units.map(u => u.id === currentUnitId ? { ...u, penyewa: "Belum ada", status: "Kosong" } : u);
+      const claimed = { ...newUnit, sewa: formatRp(rupiah(rent)), deposit: formatRp(rupiah(deposit)), penyewa: String(newTenant.nama), status: "Dipesan" };
+      base = base.some(u => u.id === newUnit.id) ? base.map(u => u.id === newUnit.id ? claimed : u) : [claimed, ...base];
+      setUnits(base);
+      if (currentPropertyId) syncPropertyOccupancy(currentPropertyId, setProperties, base);
+      if (prop.id !== currentPropertyId) syncPropertyOccupancy(String(prop.id), setProperties, base);
+    } else {
+      setUnits(units.map(u => u.id === newUnit.id ? { ...u, penyewa: String(newTenant.nama), sewa: formatRp(rupiah(rent)), deposit: formatRp(rupiah(deposit)) } : u));
+    }
+
+    if (tenantChanged) {
+      setTenants(old => old.map(tn => tn.id === currentTenantId ? { ...tn, unit: "", status: "Belum ada sewa" } : tn.id === newTenant.id ? { ...tn, unit: label, status: "Dipesan" } : tn));
+    } else if (unitChanged) {
+      setTenants(old => old.map(tn => tn.id === newTenant.id ? { ...tn, unit: label } : tn));
+    }
+
+    update({ penyewa: String(newTenant.nama), properti: String(prop.nama), unit: label, durasi: duration, sewa: formatRp(rupiah(rent)), deposit: formatRp(rupiah(deposit)), _propertyId: String(prop.id), _unitId: String(newUnit.id), _tenantId: String(newTenant.id), _notes: notes });
+    notify(message(locale, "saved", { item: t("reservasi") }));
+  };
 
   const toDraft = () => {
     const nomor = `KTR-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`;
@@ -779,10 +944,10 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
     notify(message(locale, "contractSigned", { date: fmtShort(start) }));
   };
   const activate = () => {
-    const nextUnits = units.map(u => u.id === reservation._unitId ? { ...u, penyewa: String(reservation.penyewa), status: "Dihuni" } : u);
+    const nextUnits = units.map(u => u.id === currentUnitId ? { ...u, penyewa: String(reservation.penyewa), status: "Dihuni" } : u);
     setUnits(nextUnits);
-    if (reservation._propertyId) syncPropertyOccupancy(String(reservation._propertyId), setProperties, nextUnits);
-    setTenants(old => old.map(tn => tn.id === reservation._tenantId ? { ...tn, unit: String(reservation.unit), sejak: String(reservation.jadwalMasuk), periodeSewa: String(reservation.periode), status: "Aktif" } : tn));
+    if (currentPropertyId) syncPropertyOccupancy(currentPropertyId, setProperties, nextUnits);
+    setTenants(old => old.map(tn => tn.id === currentTenantId ? { ...tn, unit: String(reservation.unit), sejak: String(reservation.jadwalMasuk), periodeSewa: String(reservation.periode), status: "Aktif" } : tn));
     const start = parseInput(String(reservation.jadwalMasuk));
     const month = start.getUTCMonth();
     const invId = `INV-${String(month + 1).padStart(2, "0")}${String(start.getUTCFullYear()).slice(-2)}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
@@ -796,10 +961,10 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
     notify(message(locale, "moveOutScheduled", { name: String(reservation.penyewa), date: d }));
   };
   const endReservation = () => {
-    const nextUnits = units.map(u => u.id === reservation._unitId ? { ...u, penyewa: "Belum ada", status: "Kosong" } : u);
+    const nextUnits = units.map(u => u.id === currentUnitId ? { ...u, penyewa: "Belum ada", status: "Kosong" } : u);
     setUnits(nextUnits);
-    if (reservation._propertyId) syncPropertyOccupancy(String(reservation._propertyId), setProperties, nextUnits);
-    setTenants(old => old.map(tn => tn.id === reservation._tenantId ? { ...tn, unit: "", periodeSewa: "", status: "Belum ada sewa" } : tn));
+    if (currentPropertyId) syncPropertyOccupancy(currentPropertyId, setProperties, nextUnits);
+    setTenants(old => old.map(tn => tn.id === currentTenantId ? { ...tn, unit: "", periodeSewa: "", status: "Belum ada sewa" } : tn));
     update({ status: "Tidak Aktif", jadwalKeluar: fmtShort(parseInput(moveOutDate)) });
     notify(message(locale, "reservationEnded", { unit: String(reservation.unit) }));
   };
@@ -836,39 +1001,68 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
 
   return <>
     <button className="button tenant-back" onClick={onBack}><ChevronLeft />{t("Semua reservasi")}</button>
-    <section className="panel tenant-summary-card"><div className="tenant-summary-main"><div className="tenant-heading"><span className="avatar tenant-avatar"><WalletCards size={18} /></span><div><div className="property-title"><h1>{v(reservation.kode)}</h1><Status>{reservation.status}</Status></div><p className="subtext">{v(reservation.penyewa)} · {v(reservation.unit)} · {v(reservation.properti)}</p></div></div>
+    <div className="page-head"><div><div className="property-title"><h1>{v(reservation.kode)}</h1><Status>{reservation.status}</Status></div><p className="subtext">{v(reservation.penyewa)} · {v(reservation.unit)} · {v(reservation.properti)}</p></div>
       {tenant && <div className="actions"><a className="button primary whatsapp-cta" href={whatsappUrl(tenant.telepon)} target="_blank" rel="noreferrer"><MessageSquareText />WhatsApp</a></div>}</div>
-      <div className="tenant-metrics"><div><span>{t("Durasi")}</span><strong>{v(reservation.durasi)}</strong></div><div><span>{t("Sewa bulanan")}</span><strong>{v(reservation.sewa)}</strong></div><div><span>Deposit</span><strong>{v(reservation.deposit)}</strong></div><div><span>{t("Periode sewa")}</span><strong>{reservation.periode ? v(reservation.periode) : "—"}</strong></div></div>
-    </section>
 
     {expiring && <section className="panel reminder-banner"><CalendarClock /><div><strong>{t("Kontrak akan berakhir")}</strong><span>{message(locale, "expirySoon", { days: Math.max(0, daysUntil(endDate)) })}</span></div>
       <div className="reminder-action"><input type="date" aria-label={t("Jadwal keluar")} value={moveOutDate} onChange={e => setMoveOutDate(e.target.value)} /><button className="button" onClick={scheduleMoveOut}><CalendarClock />{t("Jadwalkan move-out")}</button></div></section>}
 
-    <div className="tenant-detail-layout"><main className="tenant-main-column">
-      <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Status reservasi")}</h2><p>{t("Jalankan tahap berikutnya untuk reservasi ini.")}</p></div></div>
-        <div className="timeline" style={{ marginBottom: 18 }}>{RES_STATUSES.slice(0, 4).map((s, i) => <div key={s} className={`stage ${i < rank ? "done" : ""} ${i === rank ? "current" : ""}`}><div className="stage-dot">{i < rank ? <Check size={11} /> : i + 1}</div>{t(s)}</div>)}</div>
+    <div className="reservation-form">
+      <section className="panel tenant-card"><div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><ClipboardList /></span><h2>{t("Informasi reservasi")}</h2></div></div>
+        <div className="form-grid">
+          <div className="form-field full"><label htmlFor="rd-property">{t("Properti")}</label>
+            {editable ? <select id="rd-property" value={propertyId} onChange={e => changeEditProperty(e.target.value)}>{properties.map(p => { const avail = availableCount(p) + (p.id === reservation._propertyId ? 1 : 0); return <option key={p.id} value={p.id} disabled={avail === 0 && p.id !== reservation._propertyId}>{v(p.nama)} · {avail > 0 ? `${avail} ${t("unit tersedia")}` : t("Penuh")}</option>; })}</select>
+              : <input id="rd-property" value={v(reservation.properti)} readOnly />}
+          </div>
+          <div className="form-field full"><label htmlFor="rd-unit">{t("Unit")}</label>
+            {editable ? <select id="rd-unit" value={unitId} onChange={e => { setUnitId(e.target.value); const u = editUnits.find(x => x.id === e.target.value); setRent(String(unitRent(u, editProperty))); setDeposit(String(unitDeposit(u, editProperty))); }}>{editUnits.map(u => <option key={u.id} value={u.id} disabled={!isUnitSelectable(u)}>{(u._synthetic ? t("Unit utama") : `${t("Unit")} ${u.unit}`)} · {isUnitSelectable(u) ? t("Tersedia") : t("Terisi")}</option>)}</select>
+              : <input id="rd-unit" value={v(reservation.unit)} readOnly />}
+          </div>
+          <div className="form-field full"><label htmlFor="rd-tenant">{t("Penyewa")}</label>
+            {editable ? <TenantCombobox options={tenantOptions} value={tenantId} onSelect={setTenantId} onAddNew={() => setShowTenantForm(true)} />
+              : <input id="rd-tenant" value={v(reservation.penyewa)} readOnly />}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel tenant-card"><div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><WalletCards /></span><h2>{t("Ketentuan sewa")}</h2></div></div>
+        <div className="form-grid">
+          <div className="form-field"><label htmlFor="rd-duration">{t("Durasi")}</label>
+            {editable ? <select id="rd-duration" value={duration} onChange={e => setDuration(e.target.value)}>{["1 bulan", "3 bulan", "6 bulan", "12 bulan", "24 bulan"].map(o => <option key={o} value={o}>{v(o)}</option>)}</select>
+              : <input id="rd-duration" value={v(reservation.durasi)} readOnly />}
+          </div>
+          <div className="form-field"><label>{t("Periode sewa")}</label><input value={reservation.periode ? v(reservation.periode) : "—"} readOnly /></div>
+          <div className="form-field"><label htmlFor="rd-rent">{t("Sewa bulanan")}</label><div className="money-input"><span>Rp</span><input id="rd-rent" type="number" inputMode="numeric" min="0" step="1000" value={rent} readOnly={!editable} onChange={e => setRent(e.target.value)} /></div></div>
+          <div className="form-field"><label htmlFor="rd-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="rd-deposit" type="number" inputMode="numeric" min="0" step="1000" value={deposit} readOnly={!editable} onChange={e => setDeposit(e.target.value)} /></div></div>
+          <div className="form-field"><label>{t("Jadwal masuk")}</label><input value={reservation.jadwalMasuk ? v(reservation.jadwalMasuk) : "—"} readOnly /></div>
+          <div className="form-field"><label>{t("Jadwal keluar")}</label><input value={reservation.jadwalKeluar ? v(reservation.jadwalKeluar) : "—"} readOnly /></div>
+          <div className="form-field full"><label htmlFor="rd-notes">{t("Catatan")}</label><textarea id="rd-notes" rows={3} value={notes} readOnly={!editable} onChange={e => setNotes(e.target.value)} /></div>
+        </div>
+        {editable && <div className="actions" style={{ marginTop: 18 }}><button className="button primary" onClick={saveDraft}><Check />{t("Simpan perubahan")}</button></div>}
+      </section>
+
+      <section className="panel tenant-card"><div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><CheckCircle2 /></span><h2>{t("Tahap reservasi")}</h2></div><Status>{reservation.status}</Status></div>
 
         {status === "Booking" && <div className="inline-empty"><span>{t("Reservasi dibuat. Buat draf kontrak untuk melanjutkan.")}</span><button className="button primary" onClick={toDraft}><FileType2 />{t("Buat draf kontrak")}</button></div>}
 
         {status === "Draf Kontrak" && <div className="form-grid"><div className="form-field"><label htmlFor="resv-movein">{t("Jadwal masuk")}</label><input id="resv-movein" type="date" value={moveInDate} onChange={e => setMoveInDate(e.target.value)} /></div><div className="form-field"><label>{t("Periode sewa")}</label><input value={signPreview} readOnly /></div><div className="form-field full"><button className="button primary" onClick={sign}><PenLine />{t("Tandatangani kontrak")}</button></div></div>}
 
-        {status === "Kontrak Ditandatangani" && <div><p className="subtext" style={{ marginBottom: 10 }}>{t("Jadwal masuk")}: {v(reservation.jadwalMasuk)}</p>
-          <label className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Deposit diterima")}</strong><span className="cell-sub">{t("Transfer bank")} · {v(reservation.deposit)}</span></span><input type="checkbox" checked={checklist.deposit} onChange={e => setChecklist(c => ({ ...c, deposit: e.target.checked }))} /></label>
-          <label className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Kontrak ditandatangani")}</strong><span className="cell-sub">{t("Dokumen lengkap")}</span></span><input type="checkbox" checked={checklist.contract} onChange={e => setChecklist(c => ({ ...c, contract: e.target.checked }))} /></label>
-          <label className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Kunci diserahkan")}</strong><span className="cell-sub">{t("2 set kunci")}</span></span><input type="checkbox" checked={checklist.keys} onChange={e => setChecklist(c => ({ ...c, keys: e.target.checked }))} /></label>
-          <button className="button primary" style={{ marginTop: 14 }} disabled={!checklistDone} onClick={activate}><UserCheck />{t("Konfirmasi move-in")}</button></div>}
+        {status === "Kontrak Ditandatangani" && <div><p className="subtext" style={{ marginBottom: 14 }}>{t("Jadwal masuk")}: {v(reservation.jadwalMasuk)}</p>
+          <label className="check-row"><input type="checkbox" checked={checklist.deposit} onChange={e => setChecklist(c => ({ ...c, deposit: e.target.checked }))} /><span><strong>{t("Deposit diterima")}</strong><small>{t("Transfer bank")} · {v(reservation.deposit)}</small></span></label>
+          <label className="check-row"><input type="checkbox" checked={checklist.contract} onChange={e => setChecklist(c => ({ ...c, contract: e.target.checked }))} /><span><strong>{t("Kontrak ditandatangani")}</strong><small>{t("Dokumen lengkap")}</small></span></label>
+          <label className="check-row"><input type="checkbox" checked={checklist.keys} onChange={e => setChecklist(c => ({ ...c, keys: e.target.checked }))} /><span><strong>{t("Kunci diserahkan")}</strong><small>{t("2 set kunci")}</small></span></label>
+          <button className="button primary" style={{ marginTop: 16 }} disabled={!checklistDone} onClick={activate}><UserCheck />{t("Konfirmasi move-in")}</button></div>}
 
         {status === "Aktif" && <div className="inline-empty"><span>{t("Penyewa aktif menempati unit ini.")}</span><button className="button danger" onClick={endReservation}><CalendarClock />{t("Akhiri sewa / move-out")}</button></div>}
 
         {status === "Tidak Aktif" && <div className="inline-empty"><span>{t("Reservasi selesai.")} {reservation.jadwalKeluar ? `${t("Jadwal keluar")}: ${v(reservation.jadwalKeluar)}` : ""}</span></div>}
       </section>
 
-      {rank >= 1 && <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Kontrak sewa")}</h2><p>{v(reservation._nomor || reservation.kode)}</p></div><Status>{rank >= 2 ? "Ditandatangani" : "Draf"}</Status></div>
+      {rank >= 1 && <section className="panel tenant-card"><div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><FileText /></span><h2>{t("Kontrak sewa")}</h2></div><Status>{rank >= 2 ? "Ditandatangani" : "Draf"}</Status></div>
         <div className="actions"><button className="button" onClick={shareContract}><MessageSquareText />{t("Bagikan ke penyewa")}</button><button className="button" onClick={downloadContract}><Download />{t("Unduh kontrak")}</button><button className="button" onClick={() => setShowPreview(true)}><Eye />{t("Pratinjau dokumen")}</button></div>
       </section>}
-    </main><aside className="tenant-side-column">
-      <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Detail reservasi")}</h2></div></div><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(reservation.penyewa)}</span><span>{t("Unit")}</span><span>{v(reservation.unit)}</span><span>{t("Properti")}</span><span>{v(reservation.properti)}</span><span>{t("Jadwal masuk")}</span><span>{reservation.jadwalMasuk ? v(reservation.jadwalMasuk) : "—"}</span><span>{t("Jadwal keluar")}</span><span>{reservation.jadwalKeluar ? v(reservation.jadwalKeluar) : "—"}</span></div></section>
-    </aside></div>
+    </div>
+    {showTenantForm && <TenantDialog state={{ mode: "create", page: "tenants" }} onClose={() => setShowTenantForm(false)} onSave={(_, row) => { upsertRow(setTenants, row); setTenantId(String(row.id)); setShowTenantForm(false); notify(message(locale, "saved", { item: t("penyewa") })); }} />}
     {showPreview && <ContractPreviewModal reservation={reservation} tenant={tenant} onClose={() => setShowPreview(false)} />}
   </>;
 }
@@ -1117,7 +1311,17 @@ function TicketDialog({ state, onClose, onSave }: { state: Exclude<DialogState, 
     if (selected.some(file => file.size > 800 * 1024)) return setError(locale === "en" ? "Each image must be smaller than 800 KB." : "Setiap gambar harus lebih kecil dari 800 KB.");
     Promise.all(selected.map(file => new Promise<string>(resolve => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.readAsDataURL(file); }))).then(images => { setProofs(current => [...current, ...images].slice(0, 4)); setError(""); });
   };
-  const submit = (event: React.FormEvent) => { event.preventDefault(); onSave("tickets", { id: row?.id || `tickets-${Date.now()}`, ...values, bukti: proofs.join("|") }); };
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const now = new Date().toISOString();
+    onSave("tickets", {
+      id: row?.id || `tickets-${Date.now()}`,
+      ...values,
+      bukti: proofs.join("|"),
+      createdAt: row?.createdAt || now,
+      assignedAt: row?.assignedAt || (values.status === "Ditugaskan" ? now : ""),
+    });
+  };
   return <div className="backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}><form className="dialog ticket-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="ticket-form-title">
     <div className="dialog-head"><div><span className="eyebrow">{values.tiket}</span><h2 id="ticket-form-title">{locale === "en" ? (state.mode === "create" ? "New maintenance ticket" : "Edit maintenance ticket") : (state.mode === "create" ? "Tiket pemeliharaan baru" : "Edit tiket pemeliharaan")}</h2></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div>
     <div className="dialog-body ticket-form"><div className="form-grid">
@@ -1435,15 +1639,23 @@ function MessageTemplatesPage({ templates, setTemplates, notify }: { templates: 
   const { locale } = useI18n();
   const L = (id: string, en: string) => (locale === "en" ? en : id);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const editing = templates.find(template => template.id === editingId);
-  const editingEvent = editing && findEvent(editing.eventId);
+  const [draft, setDraft] = useState<MessageTemplate | null>(null);
+  const editing = draft ?? templates.find(template => template.id === editingId);
 
-  if (editing && editingEvent) {
-    return <MessageTemplateEditor template={editing} event={editingEvent} onBack={() => setEditingId(null)} onSave={updated => {
-      setTemplates(templates.map(template => template.id === updated.id ? updated : template));
-      setEditingId(null);
+  const closeEditor = () => { setDraft(null); setEditingId(null); };
+
+  if (editing) {
+    const event = editing.eventId ? findEvent(editing.eventId) : undefined;
+    const isCustom = !editing.eventId;
+    return <MessageTemplateEditor template={editing} event={event} onBack={closeEditor} onSave={updated => {
+      setTemplates(templates.some(template => template.id === updated.id) ? templates.map(template => template.id === updated.id ? updated : template) : [updated, ...templates]);
+      closeEditor();
       notify(L("Template pesan disimpan.", "Message template saved."));
-    }} />;
+    }} onDelete={isCustom ? () => {
+      setTemplates(templates.filter(template => template.id !== editing.id));
+      closeEditor();
+      notify(L("Template dihapus.", "Template deleted."));
+    } : undefined} />;
   }
 
   const toggleActive = (id: string) => {
@@ -1456,32 +1668,36 @@ function MessageTemplatesPage({ templates, setTemplates, notify }: { templates: 
     notify(next ? L("Template diaktifkan.", "Template activated.") : L("Template dinonaktifkan.", "Template deactivated."));
   };
 
+  const createCustom = () => setDraft({ id: `custom-${Date.now()}`, active: true, body: "", custom: { name: "", values: [] } });
+
   return <>
-    <PageHead page="messages" />
+    <PageHead page="messages" action={createCustom} />
     <section className="panel template-intro">
       <span className="template-intro-icon"><MessageSquareText /></span>
       <div>
         <strong>{L("Pesan otomatis berdasarkan peristiwa", "Event-driven automated messages")}</strong>
-        <p>{L("Setiap peristiwa membawa datanya sendiri (penyewa, jatuh tempo, tautan pembayaran). Logika & variabel dikelola sistem — Anda mengatur isi pesan dan status aktifnya.", "Each event carries its own data (tenant, due date, payment link). The logic and variables are managed by the system — you author the message body and its active status.")}</p>
+        <p>{L("Template sistem terikat ke peristiwa yang membawa datanya sendiri (penyewa, jatuh tempo, tautan pembayaran). Untuk kebutuhan lain, buat template kustom dengan nilai Anda sendiri.", "System templates are bound to events that carry their own data (tenant, due date, payment link). For anything else, create a custom template with your own values.")}</p>
       </div>
     </section>
     <section className="panel template-list-panel">
       <div className="template-list">
         {templates.map(template => {
-          const event = findEvent(template.eventId);
-          if (!event) return null;
+          const event = template.eventId ? findEvent(template.eventId) : undefined;
+          if (template.eventId && !event) return null;
+          const title = event ? eventLabel(event, locale) : (template.custom?.name || L("Template tanpa nama", "Untitled template"));
+          const timing = event ? eventTiming(event, locale) : L("Manual", "Manual");
           return <article className={`template-row ${template.active ? "" : "is-inactive"}`} key={template.id}>
             <button type="button" className="template-row-main" onClick={() => setEditingId(template.id)}>
               <span className="template-row-icon"><MessageSquareText /></span>
               <span className="template-row-copy">
-                <span className="template-row-title"><strong>{eventLabel(event, locale)}</strong>{template.interactive && <span className="template-badge">{L("Interaktif", "Interactive")}</span>}</span>
-                <small>{eventTiming(event, locale)} · WhatsApp</small>
+                <span className="template-row-title"><strong>{title}</strong>{!event && <span className="template-badge template-badge-custom">{L("Kustom", "Custom")}</span>}{template.interactive && <span className="template-badge">{L("Interaktif", "Interactive")}</span>}</span>
+                <small>{timing} · WhatsApp</small>
                 <span className="template-row-snippet">{bodySnippet(template.body)}</span>
               </span>
             </button>
             <div className="template-row-actions">
               <label className="switch" title={L("Aktif", "Active")}>
-                <input type="checkbox" checked={template.active} onChange={() => toggleActive(template.id)} aria-label={`${eventLabel(event, locale)} — ${L("Aktif", "Active")}`} />
+                <input type="checkbox" checked={template.active} onChange={() => toggleActive(template.id)} aria-label={`${title} — ${L("Aktif", "Active")}`} />
                 <span className="switch-track"><span className="switch-thumb" /></span>
               </label>
               <button type="button" className="button template-edit-button" onClick={() => setEditingId(template.id)}><Pencil />{L("Ubah", "Edit")}</button>
@@ -1493,11 +1709,16 @@ function MessageTemplatesPage({ templates, setTemplates, notify }: { templates: 
   </>;
 }
 
-function MessageTemplateEditor({ template, event, onBack, onSave }: { template: MessageTemplate; event: MessageEvent; onBack: () => void; onSave: (template: MessageTemplate) => void }) {
+function MessageTemplateEditor({ template, event, onBack, onSave, onDelete }: { template: MessageTemplate; event?: MessageEvent; onBack: () => void; onSave: (template: MessageTemplate) => void; onDelete?: () => void }) {
   const { locale } = useI18n();
   const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const isCustom = !template.eventId;
   const [active, setActive] = useState(template.active);
+  const [name, setName] = useState(template.custom?.name || "");
   const [body, setBody] = useState(template.body);
+  const [customValues, setCustomValues] = useState<VariableDef[]>(template.custom?.values || []);
+  const [valLabel, setValLabel] = useState("");
+  const [valSample, setValSample] = useState("");
   const [interactive, setInteractive] = useState(Boolean(template.interactive));
   const [question, setQuestion] = useState(template.interactive?.question || "");
   const [options, setOptions] = useState<TemplateOption[]>(template.interactive?.options || []);
@@ -1506,8 +1727,10 @@ function MessageTemplateEditor({ template, event, onBack, onSave }: { template: 
   const [showVars, setShowVars] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
 
-  const eventVariables: VariableDef[] = event.variables;
-  const values = sampleValues(event);
+  const availableVars: VariableDef[] = isCustom ? customValues : (event?.variables ?? []);
+  const values: Record<string, string> = {};
+  for (const constant of ORG_CONSTANTS) values[constant.token] = constant.example;
+  for (const variable of availableVars) values[variable.token] = variable.example || `[${variable.token}]`;
 
   const insertAtCursor = (snippet: string) => {
     const area = document.getElementById("template-body") as HTMLTextAreaElement | null;
@@ -1542,10 +1765,21 @@ function MessageTemplateEditor({ template, event, onBack, onSave }: { template: 
   };
   const setBranch = (label: string, text: string) => setBranches(current => ({ ...current, [label]: text }));
 
+  const addValue = () => {
+    const label = valLabel.trim();
+    const token = slugifyToken(label);
+    if (!token || customValues.some(value => value.token === token) || ORG_CONSTANTS.some(constant => constant.token === token)) { setValLabel(""); setValSample(""); return; }
+    setCustomValues(current => [...current, { token, label, labelEn: label, example: valSample.trim() || label }]);
+    setValLabel("");
+    setValSample("");
+  };
+  const removeValue = (token: string) => setCustomValues(current => current.filter(value => value.token !== token));
+
   const save = () => onSave({
     ...template,
     active,
     body,
+    custom: isCustom ? { name: name.trim() || L("Template tanpa nama", "Untitled template"), values: customValues } : undefined,
     interactive: interactive && options.length > 0 ? { question, options, branches } : undefined,
   });
 
@@ -1554,11 +1788,12 @@ function MessageTemplateEditor({ template, event, onBack, onSave }: { template: 
     <button type="button" className="button template-back" onClick={onBack}><ChevronLeft />{L("Kembali ke daftar", "Back to list")}</button>
     <div className="template-editor-head">
       <div>
-        <span className="eyebrow">{L("Template pesan", "Message template")} · WhatsApp</span>
-        <h1>{eventLabel(event, locale)}</h1>
-        <p>{eventDescription(event, locale)} · {eventTiming(event, locale)}</p>
+        <span className="eyebrow">{isCustom ? L("Template kustom", "Custom template") : L("Template pesan", "Message template")} · WhatsApp</span>
+        <h1>{isCustom ? (name.trim() || L("Template tanpa nama", "Untitled template")) : eventLabel(event!, locale)}</h1>
+        <p>{isCustom ? L("Dikirim manual ke penyewa. Anda menentukan nilainya sendiri.", "Sent manually to tenants. You define its values yourself.") : `${eventDescription(event!, locale)} · ${eventTiming(event!, locale)}`}</p>
       </div>
       <div className="template-editor-head-actions">
+        {onDelete && <button type="button" className="button template-delete" onClick={onDelete}><Trash2 />{L("Hapus", "Delete")}</button>}
         <label className="switch-inline"><span>{active ? L("Aktif", "Active") : L("Nonaktif", "Inactive")}</span><span className="switch"><input type="checkbox" checked={active} onChange={() => setActive(value => !value)} /><span className="switch-track"><span className="switch-thumb" /></span></span></label>
         <button type="button" className="button" onClick={onBack}>{L("Batal", "Cancel")}</button>
         <button type="button" className="button primary" onClick={save}>{L("Simpan", "Save")}</button>
@@ -1567,7 +1802,14 @@ function MessageTemplateEditor({ template, event, onBack, onSave }: { template: 
 
     <div className="template-editor-layout">
       <div className="template-editor-form">
-        <div className="template-locked-note"><ShieldCheck /><span>{L("Logika & pemicu dikelola sistem. Anda hanya mengubah isi pesan & status aktif.", "The trigger and logic are managed by the system. You only change the message body and active status.")}</span></div>
+        {isCustom
+          ? <div className="template-locked-note"><Tag /><span>{L("Template kustom dikirim manual. Tambahkan nilai khusus di bawah untuk dipakai dalam pesan.", "Custom templates are sent manually. Add custom values below to use them in the message.")}</span></div>
+          : <div className="template-locked-note"><ShieldCheck /><span>{L("Logika & pemicu dikelola sistem. Anda hanya mengubah isi pesan & status aktif.", "The trigger and logic are managed by the system. You only change the message body and active status.")}</span></div>}
+
+        {isCustom && <section className="form-section">
+          <div className="form-section-head"><strong>{L("Detail template", "Template details")}</strong></div>
+          <div className="form-field full"><label htmlFor="template-name">{L("Nama template", "Template name")}</label><input id="template-name" value={name} onChange={field => setName(field.target.value)} placeholder={L("Mis. Promo akhir tahun", "e.g. Year-end promo")} /></div>
+        </section>}
 
         <section className="form-section">
           <div className="form-section-head"><strong>{L("Isi pesan", "Message body")}</strong></div>
@@ -1579,8 +1821,8 @@ function MessageTemplateEditor({ template, event, onBack, onSave }: { template: 
               <div className="variable-picker">
                 <button type="button" className="variable-picker-trigger" onClick={() => setShowVars(value => !value)} aria-expanded={showVars}><Tag />{L("Sisipkan variabel", "Insert variable")}</button>
                 {showVars && <div className="variable-menu" role="menu">
-                  <div className="variable-menu-group">{L("Variabel peristiwa", "Event variables")}</div>
-                  {eventVariables.map(variable => <button type="button" key={variable.token} role="menuitem" onClick={() => insertVariable(variable.token)}><code>{`{{${variable.token}}}`}</code><span>{variableLabel(variable, locale)}</span></button>)}
+                  <div className="variable-menu-group">{isCustom ? L("Nilai template", "Template values") : L("Variabel peristiwa", "Event variables")}</div>
+                  {availableVars.length > 0 ? availableVars.map(variable => <button type="button" key={variable.token} role="menuitem" onClick={() => insertVariable(variable.token)}><code>{`{{${variable.token}}}`}</code><span>{variableLabel(variable, locale)}</span></button>) : <div className="variable-menu-empty">{L("Belum ada nilai.", "No values yet.")}</div>}
                   <div className="variable-menu-group">{L("Konstanta organisasi", "Organization constants")}</div>
                   {ORG_CONSTANTS.map(variable => <button type="button" key={variable.token} role="menuitem" onClick={() => insertVariable(variable.token)}><code>{`{{${variable.token}}}`}</code><span>{variableLabel(variable, locale)}</span></button>)}
                 </div>}
@@ -1588,8 +1830,26 @@ function MessageTemplateEditor({ template, event, onBack, onSave }: { template: 
             </div>
             <textarea id="template-body" rows={8} value={body} onChange={field => setBody(field.target.value)} placeholder={L("Tulis pesan WhatsApp…", "Write the WhatsApp message…")} />
           </div>
-          <div className="variable-hints">{eventVariables.slice(0, 6).map(variable => <button type="button" key={variable.token} onClick={() => insertVariable(variable.token)}>+ {variableLabel(variable, locale)}</button>)}</div>
+          <div className="variable-hints">{availableVars.slice(0, 6).map(variable => <button type="button" key={variable.token} onClick={() => insertVariable(variable.token)}>+ {variableLabel(variable, locale)}</button>)}</div>
         </section>
+
+        {isCustom && <section className="form-section">
+          <div className="form-section-head"><strong>{L("Nilai kustom", "Custom values")}</strong></div>
+          <p className="field-help">{L("Tentukan nilai yang bisa Anda sisipkan ke pesan sebagai variabel. Anda mengisi nilainya saat mengirim.", "Define values you can insert into the message as variables. You fill them in when sending.")}</p>
+          <div className="custom-value-list">
+            {customValues.map(value => <div className="custom-value-row" key={value.token}>
+              <code>{`{{${value.token}}}`}</code>
+              <span className="custom-value-meta"><strong>{value.label}</strong><small>{value.example}</small></span>
+              <button type="button" className="icon-button" aria-label={`${L("Hapus", "Remove")} ${value.label}`} onClick={() => removeValue(value.token)}><X /></button>
+            </div>)}
+            {customValues.length === 0 && <p className="inline-empty">{L("Belum ada nilai kustom.", "No custom values yet.")}</p>}
+          </div>
+          <div className="custom-value-add">
+            <input value={valLabel} onChange={field => setValLabel(field.target.value)} onKeyDown={field => { if (field.key === "Enter") { field.preventDefault(); addValue(); } }} placeholder={L("Nama nilai (mis. Nama promo)", "Value name (e.g. Promo name)")} />
+            <input value={valSample} onChange={field => setValSample(field.target.value)} onKeyDown={field => { if (field.key === "Enter") { field.preventDefault(); addValue(); } }} placeholder={L("Contoh nilai (mis. Diskon 20%)", "Sample value (e.g. 20% off)")} />
+            <button type="button" className="button" onClick={addValue}><Plus />{L("Tambah", "Add")}</button>
+          </div>
+        </section>}
 
         <section className="form-section">
           <div className="form-section-head">
@@ -1643,6 +1903,9 @@ function SewainContent() {
   const [focusReservationId, setFocusReservationId] = useState("");
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toast, setToast] = useState("");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [readNotifications, setReadNotifications] = useState<string[]>([]);
+  const notificationsRef = useRef<HTMLDivElement>(null);
   const [propertyRows, setPropertyRows] = useStoredRows("properties", seedProperties);
   const [tokenConfig, setTokenConfig] = useStoredConfig<TokenConfig>("token-config", defaultTokenConfig);
   const [invoiceRows, setInvoiceRows] = useStoredRows("invoices", seedInvoices);
@@ -1654,10 +1917,41 @@ function SewainContent() {
   const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
   const [documents, setDocuments] = useStoredRows("documents", moduleData.documents);
   const [units, setUnits] = useStoredRows("units", seedUnits);
-  useEffect(() => { setSidebarCollapsed(localStorage.getItem("sewain:sidebar-collapsed") === "true"); }, []);
+  useEffect(() => {
+    setSidebarCollapsed(localStorage.getItem("sewain:sidebar-collapsed") === "true");
+    try { setReadNotifications(JSON.parse(localStorage.getItem("sewain:read-notifications") || "[]")); } catch { setReadNotifications([]); }
+  }, []);
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!notificationsRef.current?.contains(event.target as Node)) setNotificationsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNotificationsOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [notificationsOpen]);
   const stores: Partial<Record<PageId, [Row[], React.Dispatch<React.SetStateAction<Row[]>>]>> = useMemo(() => ({ properties: [propertyRows, setPropertyRows], invoices: [invoiceRows, setInvoiceRows], tenants: [tenants, setTenants], reservations: [reservations, setReservations], tokens: [tokens, setTokens], contracts: [contracts, setContracts], tickets: [tickets, setTickets], documents: [documents, setDocuments] }), [propertyRows, invoiceRows, tenants, reservations, tokens, contracts, tickets, documents, setPropertyRows, setInvoiceRows, setTenants, setReservations, setTokens, setContracts, setTickets, setDocuments]);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
   const go = (id: PageId) => { setPage(id); setMobileNav(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const rememberRead = (ids: string[]) => {
+    const next = Array.from(new Set([...readNotifications, ...ids]));
+    setReadNotifications(next);
+    localStorage.setItem("sewain:read-notifications", JSON.stringify(next));
+  };
+  const openNotification = (item: NotificationItem) => {
+    rememberRead([item.id]);
+    setNotificationsOpen(false);
+    go(item.page);
+    const store = stores[item.page];
+    const row = store?.[0].find(candidate => candidate.id === item.rowId);
+    if (row) setDialog({ mode: "edit", page: item.page, row });
+  };
   const toggleSidebar = () => setSidebarCollapsed(current => {
     localStorage.setItem("sewain:sidebar-collapsed", String(!current));
     return !current;
@@ -1669,12 +1963,12 @@ function SewainContent() {
   return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
     {mobileNav && <button className="mobile-overlay" aria-label={t("Tutup navigasi")} onClick={() => setMobileNav(false)} />}
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-      <div className="brand"><span className="brand-mark"><Home size={16} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")}>{sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}</button></div>
+      <div className="brand"><span className="brand-mark"><Home size={16} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")}><span className="collapse-icon-stack" aria-hidden="true"><span className={sidebarCollapsed ? "is-visible" : "is-hidden"}><PanelLeftOpen /></span><span className={sidebarCollapsed ? "is-hidden" : "is-visible"}><PanelLeftClose /></span></span></button></div>
       <nav className="nav" aria-label={t("Navigasi utama")}><div className="nav-label">{t("Operasional")}</div>{nav.slice(0, 9).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}<div className="nav-label">Workspace</div>{nav.slice(9).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}</nav>
       <div className="language-switcher"><span className="language-flag" aria-hidden="true">{locale === "id" ? "🇮🇩" : "🇬🇧"}</span><select id="locale" aria-label={t("Bahasa")} value={locale} onChange={event => setLocale(event.target.value as Locale)}><option value="id">Indonesia</option><option value="en">English</option></select></div>
       <div className="profile" title={sidebarCollapsed ? "Andi Triono" : undefined}><span className="avatar">AT</span><div className="profile-copy"><strong>Andi Triono</strong><span>{t("Pemilik · PT Makmur")}</span></div></div>
     </aside>
-    <div className="shell"><header className="topbar"><button className="icon-button menu-button" aria-label={t("Buka navigasi")} onClick={() => setMobileNav(true)}><PanelLeftOpen /></button><div className="global-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Pencarian global")} placeholder={t("Cari properti, penyewa, atau tagihan...")} /><span className="kbd">⌘K</span></div><div className="top-actions"><button className="icon-button hide-mobile" aria-label={t("Jadwal")}><CalendarDays /></button><button className="icon-button" aria-label={t("Notifikasi")}><Bell /></button></div></header>
+    <div className="shell"><header className="topbar"><button className="icon-button menu-button" aria-label={t("Buka navigasi")} onClick={() => setMobileNav(true)}><PanelLeftOpen /></button><div className="global-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Pencarian global")} placeholder={t("Cari properti, penyewa, atau tagihan...")} /><span className="kbd">⌘K</span></div><div className="top-actions"><button className="icon-button hide-mobile" aria-label={t("Jadwal")}><CalendarDays /></button><div className="notification-anchor" ref={notificationsRef}><button className={`icon-button notification-trigger ${notificationsOpen ? "active" : ""}`} aria-label={locale === "en" ? "Notifications" : "Notifikasi"} aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(current => !current)}><Bell />{notificationItems.some(item => !readNotifications.includes(item.id)) && <span className="notification-dot" aria-hidden="true" />}</button>{notificationsOpen && <section className="notification-popover" role="dialog" aria-label={locale === "en" ? "Notifications" : "Notifikasi"}><div className="notification-head"><div><h2>{locale === "en" ? "Notifications" : "Notifikasi"}</h2><p>{locale === "en" ? "Your latest operational updates" : "Pembaruan operasional terbaru"}</p></div><button className="notification-read-all" onClick={() => rememberRead(notificationItems.map(item => item.id))}>{locale === "en" ? "Mark all read" : "Tandai dibaca"}</button></div><div className="notification-list">{notificationItems.map(item => { const unread = !readNotifications.includes(item.id); const Icon = item.kind === "payment" ? CircleDollarSign : item.kind === "reminder" ? CalendarClock : item.kind === "maintenance" ? MessageSquareText : FileType2; return <button className={`notification-item ${unread ? "unread" : ""}`} key={item.id} onClick={() => openNotification(item)}><span className={`notification-icon ${item.kind}`}><Icon /></span><span className="notification-copy"><span className="notification-title">{locale === "en" ? ({ payment: "Payment received", reminder: "Invoice due today", maintenance: "New complaint from WhatsApp bot", contract: "Contract awaiting signature" } as const)[item.kind] : item.title}</span><span className="notification-description">{item.description}</span><time>{item.time}</time></span>{unread && <span className="unread-dot" aria-label={locale === "en" ? "Unread" : "Belum dibaca"} />}</button>; })}</div><button className="notification-footer" onClick={() => { setNotificationsOpen(false); go("dashboard"); }}>{locale === "en" ? "Open activity overview" : "Buka ringkasan aktivitas"}<ChevronLeft /></button></section>}</div></div></header>
       <main className="main" id="main-content">
         {page === "dashboard" && <Dashboard go={go} reservations={reservations} />}
         {page === "properties" && <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} onBook={openBooking} openDialog={setDialog} notify={notify} />}
@@ -1684,7 +1978,7 @@ function SewainContent() {
         {page === "tokens" && <TokenPage rows={tokens} setRows={setTokens} openDialog={setDialog} notify={notify} />}
         {page === "settings" && <SettingsPage notify={notify} />}
         {page === "messages" && <MessageTemplatesPage templates={templates} setTemplates={setTemplates} notify={notify} />}
-        {page === "reservations" && <ReservationsPage rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} />}
+        {page === "reservations" && <ReservationsPage rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} properties={propertyRows} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} />}
         {currentStore && !["properties", "tenants", "invoices", "tickets", "tokens", "messages", "reservations"].includes(page) && <CrudPage page={page} rows={currentStore[0]} setRows={currentStore[1]} openDialog={setDialog} notify={notify} />}
       </main>
     </div>

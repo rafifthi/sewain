@@ -17,9 +17,12 @@ export type TemplateOption = { label: string; reply: string };
 
 export type MessageTemplate = {
   id: string;
-  eventId: string;
+  // System templates are bound to an event (eventId). Custom templates have no
+  // event and instead carry their own user-defined values in `custom`.
+  eventId?: string;
   active: boolean;
   body: string;
+  custom?: { name: string; values: VariableDef[] };
   interactive?: {
     question: string;
     options: TemplateOption[];
@@ -150,6 +153,17 @@ export const MESSAGE_EVENTS: MessageEvent[] = [
 
 export function findEvent(eventId: string): MessageEvent | undefined {
   return MESSAGE_EVENTS.find(event => event.id === eventId);
+}
+
+// Turns a human label ("Nama promo") into a variable token ("nama_promo").
+export function slugifyToken(label: string): string {
+  return label.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+// Variables a template exposes: custom values for custom templates, otherwise the event's.
+export function templateVariables(template: MessageTemplate): VariableDef[] {
+  if (template.custom) return template.custom.values;
+  return (template.eventId ? findEvent(template.eventId) : undefined)?.variables ?? [];
 }
 
 export function eventLabel(event: MessageEvent, locale: Locale): string {

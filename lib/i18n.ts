@@ -134,6 +134,7 @@ const english: Record<string, string> = {
   "Akan berakhir": "Expiring soon", "≤ 30 hari": "≤ 30 days", "Kode": "Code", "Buka": "Open",
   "Belum ada reservasi": "No reservations yet",
   "Semua reservasi": "All reservations", "Status reservasi": "Reservation status", "Jalankan tahap berikutnya untuk reservasi ini.": "Run the next step for this reservation.",
+  "Informasi reservasi": "Reservation information", "Ketentuan sewa": "Rental terms", "Tahap reservasi": "Reservation stage",
   "Reservasi dibuat. Buat draf kontrak untuk melanjutkan.": "Reservation created. Create a contract draft to continue.",
   "Buat draf kontrak": "Create contract draft", "Jadwal masuk": "Move-in date", "Tandatangani kontrak": "Sign contract", "Konfirmasi move-in": "Confirm move-in",
   "Penyewa aktif menempati unit ini.": "The tenant is actively occupying this unit.", "Akhiri sewa / move-out": "End lease / move-out",
