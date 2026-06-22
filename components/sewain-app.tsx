@@ -2,7 +2,11 @@
 
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+<<<<<<< HEAD
   Bell, Bot, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, CircleDollarSign,
+=======
+  Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign,
+>>>>>>> 0b1620d (Add calendar and role permission layouts)
   ClipboardList, CreditCard, FileText, FileType2, Gauge, Home, MessageSquareText,
   Bold, CalendarClock, CalendarPlus, Download, Eye, GripVertical, IdCard, ImagePlus, Italic, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Search, Send, Settings, ShieldCheck, Tag, TicketCheck, Trash2,
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
@@ -14,8 +18,12 @@ import {
   eventDescription, eventLabel, eventTiming, findEvent, MessageEvent, MessageTemplate,
   ORG_CONSTANTS, renderPreview, SEED_TEMPLATES, slugifyToken, TemplateOption, variableLabel, VariableDef,
 } from "@/lib/message-templates";
+import {
+  can as roleCan, emptyPermissions, initials, Member, MemberStatus, ModuleId,
+  PERMISSION_ACTIONS, PERMISSION_MODULES, PermissionAction, Role, SEED_MEMBERS, SEED_ROLES,
+} from "@/lib/access-control";
 
-type PageId = "dashboard" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
+type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 type DialogState = null | { mode: "create" | "edit"; page: PageId; row?: Row };
 type BookingState = { propertyId?: string; unitId?: string };
 type NotificationItem = {
@@ -38,8 +46,21 @@ type TokenCtx = { config: TokenConfig; setConfig: (c: TokenConfig) => void; prop
 const TokenConfigContext = createContext<TokenCtx>({ config: defaultTokenConfig, setConfig: () => {}, properties: [] });
 const useTokenConfig = () => useContext(TokenConfigContext);
 
+type AccessCtx = {
+  roles: Role[]; members: Member[]; currentUserId: string;
+  currentMember: Member | undefined; currentRole: Role | undefined;
+  setRoles: (roles: Role[]) => void; setMembers: (members: Member[]) => void; setCurrentUserId: (id: string) => void;
+  can: (module: ModuleId, action: PermissionAction) => boolean;
+};
+const AccessContext = createContext<AccessCtx>({
+  roles: [], members: [], currentUserId: "", currentMember: undefined, currentRole: undefined,
+  setRoles: () => {}, setMembers: () => {}, setCurrentUserId: () => {}, can: () => true,
+});
+const useAccess = () => useContext(AccessContext);
+
 const nav = [
   { id: "dashboard", label: "Ringkasan", icon: Gauge },
+  { id: "calendar", label: "Kalender", icon: CalendarDays },
   { id: "properties", label: "Properti", icon: Building2 },
   { id: "tenants", label: "Penyewa", icon: UsersRound },
   { id: "reservations", label: "Reservasi", icon: WalletCards },
@@ -54,6 +75,7 @@ const nav = [
 
 const pageMeta: Record<PageId, { title: string; description: string; singular: string }> = {
   dashboard: { title: "Ringkasan", description: "Hal yang perlu Anda tindak lanjuti hari ini.", singular: "aktivitas" },
+  calendar: { title: "Kalender", description: "Jadwal pembayaran, kontrak, dan pemeliharaan dalam satu tampilan.", singular: "agenda" },
   properties: { title: "Properti", description: "Pantau hunian dan operasional seluruh portofolio.", singular: "properti" },
   tenants: { title: "Penyewa", description: "Data penyewa aktif, terdahulu, dan yang akan masuk.", singular: "penyewa" },
   reservations: { title: "Reservasi", description: "Lacak status setiap pemesanan dari booking hingga selesai.", singular: "reservasi" },
@@ -163,6 +185,18 @@ function useStoredConfig<T>(key: string, initial: T): [T, (v: T) => void] {
   return [value, set];
 }
 
+// Like useStoredConfig but replaces the value wholesale (no object merge), so it is
+// safe for arrays and primitives that the spread-merge above would corrupt.
+function useStoredState<T>(key: string, initial: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(initial);
+  useEffect(() => {
+    const saved = localStorage.getItem(`sewain:${key}`);
+    if (saved) try { setValue(JSON.parse(saved) as T); } catch {}
+  }, [key]);
+  const set = (next: T) => { setValue(next); localStorage.setItem(`sewain:${key}`, JSON.stringify(next)); };
+  return [value, set];
+}
+
 function slug(value: unknown) {
   return String(value).toLowerCase().replace(/\s+/g, "-");
 }
@@ -257,13 +291,15 @@ function Status({ children }: { children: React.ReactNode }) {
 
 function PageHead({ page, action, back }: { page: PageId; action?: () => void; back?: () => void }) {
   const { t } = useI18n();
+  const { can } = useAccess();
   const meta = pageMeta[page];
+  const showAction = action && can(page as ModuleId, "create");
   return <div className="page-head">
     <div>
       {back && <button className="button" onClick={back} style={{ marginBottom: 10 }}><ChevronLeft />{t("Kembali ke properti")}</button>}
       <h1>{t(meta.title)}</h1><p className="subtext">{t(meta.description)}</p>
     </div>
-    {action && <div className="actions"><button className="button primary" onClick={action}><Plus />{t("Tambah")} {t(meta.singular)}</button></div>}
+    {showAction && <div className="actions"><button className="button primary" onClick={action}><Plus />{t("Tambah")} {t(meta.singular)}</button></div>}
   </div>;
 }
 
@@ -275,14 +311,17 @@ function Toolbar({ search, setSearch }: { search: string; setSearch: (v: string)
   </div>;
 }
 
-function DataTable({ rows, onEdit, onDelete, onSelect, selected }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string }) {
+function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId }) {
   const { t, v } = useI18n();
+  const { can } = useAccess();
+  const canEdit = !module || can(module, "edit");
+  const canDelete = !module || can(module, "delete");
   const keys = rows.length ? Object.keys(rows[0]).filter(k => k !== "id" && !k.startsWith("_")).slice(0, 6) : [];
   return <div className="table-wrap"><table>
     <thead><tr>{keys.map(key => <th key={key}>{t(columnLabels[key] || key)}</th>)}<th>{t("Aksi")}</th></tr></thead>
     <tbody>{rows.map(row => <tr key={row.id} onClick={() => onSelect?.(row)} className={selected === row.id ? "selected" : ""}>
       {keys.map((key, i) => <td key={key}>{key === "status" || key === "tahap" ? <Status>{row[key]}</Status> : <span className={i === 0 ? "cell-main" : ""}>{v(row[key])}</span>}</td>)}
-      <td><div className="actions"><button className="icon-button" aria-label={`${t("Edit")} ${row.id}`} onClick={e => { e.stopPropagation(); onEdit(row); }}><Pencil /></button><button className="icon-button" aria-label={`${t("Hapus")} ${row.id}`} onClick={e => { e.stopPropagation(); onDelete(row); }}><Trash2 /></button></div></td>
+      <td><div className="actions">{canEdit && <button className="icon-button" aria-label={`${t("Edit")} ${row.id}`} onClick={e => { e.stopPropagation(); onEdit(row); }}><Pencil /></button>}{canDelete && <button className="icon-button" aria-label={`${t("Hapus")} ${row.id}`} onClick={e => { e.stopPropagation(); onDelete(row); }}><Trash2 /></button>}{!canEdit && !canDelete && <span className="cell-sub">{t("Hanya lihat")}</span>}</div></td>
     </tr>)}</tbody>
   </table></div>;
 }
@@ -294,7 +333,7 @@ function CrudPage({ page, rows, setRows, openDialog, notify }: { page: PageId; r
   const remove = (row: Row) => { setRows(old => old.filter(item => item.id !== row.id)); notify(message(locale, "removed", { item: t(pageMeta[page].singular) })); };
   return <><PageHead page={page} action={() => openDialog({ mode: "create", page })} />
     <section className="panel"><Toolbar search={search} setSearch={setSearch} />
-      {filtered.length ? <DataTable rows={filtered} onEdit={row => openDialog({ mode: "edit", page, row })} onDelete={remove} /> : <div className="empty"><ClipboardList /><div><strong>{t("Belum ada data yang cocok")}</strong>{locale === "en" ? `Change your search or add a new ${t(pageMeta[page].singular)}.` : `Ubah pencarian atau tambahkan ${pageMeta[page].singular} baru.`}</div></div>}
+      {filtered.length ? <DataTable rows={filtered} module={page as ModuleId} onEdit={row => openDialog({ mode: "edit", page, row })} onDelete={remove} /> : <div className="empty"><ClipboardList /><div><strong>{t("Belum ada data yang cocok")}</strong>{locale === "en" ? `Change your search or add a new ${t(pageMeta[page].singular)}.` : `Ubah pencarian atau tambahkan ${pageMeta[page].singular} baru.`}</div></div>}
     </section></>;
 }
 
@@ -677,7 +716,7 @@ function PropertyCard({ row, onOpen, onEdit, onDelete }: { row: Row; onOpen: () 
   </article>;
 }
 
-function PropertiesPage({ rows, setRows, units, setUnits, onBook, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; onBook: (ctx: BookingState) => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(null);
   const [search, setSearch] = useState("");
@@ -692,28 +731,61 @@ function PropertiesPage({ rows, setRows, units, setUnits, onBook, openDialog, no
     const rowLabels = String(row.labels || row.tipe || "").split(/[|,]/).map(label => label.trim());
     return matchesSearch && (filter === "Semua" || filter === unitType || rowLabels.includes(filter));
   });
-  if (selected) return <PropertyDetail property={selected} units={units} setUnits={setUnits} onBook={onBook} onBack={() => setSelected(null)} notify={notify} />;
+  if (selected) return <PropertyDetail property={selected} units={units} setUnits={setUnits} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} notify={notify} />;
   return <><PageHead page="properties" action={() => openDialog({ mode: "create", page: "properties" })} />
     <div className="property-list-toolbar"><div className="field-inline"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari properti")} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Cari properti...")} /></div><div className="property-filter-list" aria-label={t("Filter properti")}>{filters.map(item => <button type="button" className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>{v(item)}</button>)}</div></div>
     {filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} onEdit={() => openDialog({ mode: "edit", page: "properties", row })} onDelete={() => { setRows(old => old.filter(item => item.id !== row.id)); notify(locale === "en" ? "Property removed from the list." : "Properti dihapus dari daftar."); }} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
   </>;
 }
 
-function PropertyDetail({ property, units, setUnits, onBook, onBack, notify }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; onBook: (ctx: BookingState) => void; onBack: () => void; notify: (s: string) => void }) {
+function PropertyDetail({ property, units, setUnits, invoices, tickets, onBook, onViewReservations, onBack, notify }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
+  const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
   const propertyUnits = unitsForProperty(units, property);
-  const [selectedId, setSelectedId] = useState<string>(() => (propertyUnits.find(isVacant) || propertyUnits[0])?.id ?? "");
-  const selected = propertyUnits.find(row => row.id === selectedId) || propertyUnits[0];
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [unitSearch, setUnitSearch] = useState("");
+  const selected = propertyUnits.find(row => row.id === selectedId);
+  const filteredUnits = propertyUnits.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(unitSearch.toLowerCase())));
   const total = propertyUnits.length || Number(property.unit || 0);
   const occupied = propertyUnits.filter(row => /dihuni/i.test(String(row.status))).length;
   const vacant = propertyUnits.filter(isVacant).length;
   const occupancy = total ? Math.round((occupied / total) * 100) : 0;
+  const propLabels = String(property.labels || property.tipe || "").split(/[|,]/).map(l => l.trim()).filter(Boolean);
+  const propertyTag = String(property.nama).replace(/^(Kos|Kontrakan|Ruko|Apartemen|Rumah|Paviliun)\s+/i, "").split(/[\s,]+/)[0];
+  const propertyInvoices = invoices.filter(inv => String(inv.unit || "").startsWith(propertyTag) || String(inv.unit || "") === String(property.nama));
+  const propertyTickets = tickets.filter(tkt => String(tkt.properti) === String(property.nama));
+  const openTickets = propertyTickets.filter(tkt => tkt.status !== "Selesai");
+  const waHref = property.contactPhone ? `https://wa.me/62${String(property.contactPhone).replace(/\D/g, "").replace(/^0/, "")}` : undefined;
+  const singleUnit = isSingleUnit(property);
+  const primaryUnit = singleUnit ? propertyUnits[0] : undefined;
+  const singleUnitView = primaryUnit ? <section className="single-unit-panel">
+    <div className="single-unit-head"><div><span className="eyebrow">{locale === "en" ? "Primary unit" : "Unit utama"}</span><h2>{v(property.nama)}</h2><p>{v(primaryUnit.tipe)} · {t("Lantai")} {v(primaryUnit.lantai)}</p></div><div className="single-unit-head-actions"><Status>{primaryUnit.status}</Status>{isVacant(primaryUnit) ? <button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: primaryUnit.id })}><CalendarPlus />{t("Buat pemesanan")}</button> : /perawatan/i.test(String(primaryUnit.status)) ? <button className="button" onClick={() => setActiveTab("tickets")}><Wrench />{locale === "en" ? "View maintenance" : "Lihat pemeliharaan"}</button> : <button className="button" onClick={onViewReservations}><WalletCards />{locale === "en" ? "View active lease" : "Lihat sewa aktif"}</button>}</div></div>
+    <div className="single-unit-facts"><section><span>{locale === "en" ? "Occupancy" : "Hunian"}</span><dl><div><dt>{t("Penyewa")}</dt><dd>{v(primaryUnit.penyewa)}</dd></div><div><dt>{t("Status")}</dt><dd>{v(primaryUnit.status)}</dd></div></dl></section><section><span>{locale === "en" ? "Pricing" : "Harga"}</span><dl><div><dt>{t("Sewa per bulan")}</dt><dd>{v(primaryUnit.sewa)}</dd></div><div><dt>Deposit</dt><dd>{v(primaryUnit.deposit || formatRp(unitDeposit(primaryUnit, property)))}</dd></div><div><dt>{t("Siklus penagihan")}</dt><dd>{v(property.billingCycle || "Bulanan")}</dd></div></dl></section><section><span>{locale === "en" ? "Utilities and balance" : "Utilitas dan saldo"}</span><dl><div><dt>{t("Nomor meter")}</dt><dd>{v(primaryUnit.meter || "-")}</dd></div><div><dt>{t("Tunggakan")}</dt><dd className={primaryUnit.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(primaryUnit.tunggakan || "Rp0")}</dd></div></dl></section></div>
+    <div className="single-unit-activity"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div>
+  </section> : null;
   return <>
-    <div className="page-head"><div><button className="button" onClick={onBack} style={{ marginBottom: 10 }}><ChevronLeft />{t("Semua properti")}</button><div className="property-title"><h1>{v(property.nama)}</h1><Status>{property.status}</Status></div><p className="subtext">{v(property.lokasi)} · {property.unit} unit · {locale === "en" ? `${t("Kos")} operations` : "Kos operasional"}</p></div><div className="actions"><button className="button" onClick={() => notify(locale === "en" ? "Property link copied." : "Tautan properti disalin.")}>{t("Bagikan")}</button><button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: selected && isVacant(selected) ? selected.id : undefined })}><Plus />{t("Buat pemesanan")}</button></div></div>
-    <div className="stats-strip"><div className="stat"><span>{t("Total unit")}</span><strong>{total}</strong></div><div className="stat"><span>{t("Terisi")}</span><strong>{occupied}</strong><small>{occupancy}%</small></div><div className="stat"><span>{t("Kosong")}</span><strong>{vacant}</strong></div><div className="stat"><span>{t("Pendapatan bulan ini")}</span><strong>{v(property.pendapatan)}</strong></div></div>
-    <div className="split"><section className="panel"><div className="tabs"><button className="tab active">{t("Unit")}</button><button className="tab">{t("Detail properti")}</button><button className="tab">{t("Fasilitas")}</button><button className="tab">{t("Harga & biaya")}</button><button className="tab">{t("Riwayat")}</button></div><Toolbar search="" setSearch={() => {}} />{propertyUnits.length ? <DataTable rows={propertyUnits} selected={selected?.id} onSelect={row => setSelectedId(row.id)} onEdit={row => { setSelectedId(row.id); isVacant(row) ? onBook({ propertyId: property.id, unitId: row.id }) : notify(locale === "en" ? "This unit is occupied. Use the lease to manage its tenant." : "Unit ini terisi. Kelola penyewanya melalui sewa."); }} onDelete={row => { setUnits(old => old.filter(r => r.id !== row.id)); notify(message(locale, "unitRemoved", { unit: row.unit })); }} /> : <div className="empty"><Building2 /><div><strong>{t("Belum ada unit")}</strong>{t("Tambahkan unit pada properti ini untuk mulai membuat pemesanan.")}</div></div>}</section>
-      <aside className="detail-pane"><div className="panel-head"><div><h2>{t("Detail unit")} {selected?.unit}</h2><p>{v(selected?.tipe)} · {t("Lantai")} {selected?.lantai}</p></div><MoreHorizontal /></div><div className="detail-section"><div className="detail-title">{t("Status hunian")} <Status>{selected?.status}</Status></div><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(selected?.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(selected?.sewa)}</span><span>Deposit</span><span>{v(selected?.deposit || formatRp(unitDeposit(selected, property)))}</span><span>{t("Tunggakan")}</span><span className={selected?.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(selected?.tunggakan)}</span></div>{selected && isVacant(selected) && <button className="button primary" style={{ width: "100%", marginTop: 14 }} onClick={() => onBook({ propertyId: property.id, unitId: selected.id })}><CalendarPlus />{t("Pesan unit ini")}</button>}</div><div className="detail-section"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div></aside>
-    </div>
+    <div className="page-head"><div><button className="button" onClick={onBack} style={{ marginBottom: 10 }}><ChevronLeft />{t("Semua properti")}</button><div className="property-title"><h1>{v(property.nama)}</h1><Status>{property.status}</Status></div></div><div className="actions"><button className="button" onClick={() => notify(locale === "en" ? "Property link copied." : "Tautan properti disalin.")}>{t("Bagikan")}</button><button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: selected && isVacant(selected) ? selected.id : undefined })}><Plus />{t("Buat pemesanan")}</button></div></div>
+    <section className="panel property-overview">
+      <div className="property-overview-main">
+        <div className="property-overview-media">{property.image ? <img src={String(property.image)} alt={v(property.nama)} /> : <div className="property-image-placeholder"><Building2 /><span>{t("Gambar belum tersedia")}</span></div>}</div>
+        <div className="property-overview-copy">
+          <div className="property-header-labels">{propLabels.map(label => <span key={label}>{v(label)}</span>)}</div>
+          <div className="property-overview-facts"><p><MapPin />{v(property.alamat || property.lokasi)}</p>{property.contactName && <p><UserRound />{waHref ? <a href={waHref} target="_blank" rel="noreferrer">{v(property.contactName)} · {v(property.contactPhone)}</a> : v(property.contactName)}</p>}<p><CreditCard />{v(property.billingCycle || "Bulanan")}</p></div>
+        </div>
+      </div>
+      <div className="property-overview-metrics"><div><span>{t("Total unit")}</span><strong>{total}</strong></div><div><span>{t("Terisi")}</span><strong>{occupied}</strong><small>{occupancy}%</small></div><div><span>{t("Kosong")}</span><strong>{vacant}</strong></div><div><span>{t("Pendapatan bulan ini")}</span><strong>{v(property.pendapatan || "Rp0")}</strong></div></div>
+    </section>
+    <section className={`panel property-workspace ${singleUnit ? "single-unit-mode" : ""}`}>
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={activeTab === "units"} className={`tab ${activeTab === "units" ? "active" : ""}`} onClick={() => setActiveTab("units")}>{t("Unit")}<span className="tab-count">{propertyUnits.length}</span></button>
+        <button role="tab" aria-selected={activeTab === "invoices"} className={`tab ${activeTab === "invoices" ? "active" : ""}`} onClick={() => setActiveTab("invoices")}>{t("Tagihan")}{propertyInvoices.length > 0 && <span className="tab-count">{propertyInvoices.length}</span>}</button>
+        <button role="tab" aria-selected={activeTab === "tickets"} className={`tab ${activeTab === "tickets" ? "active" : ""}`} onClick={() => setActiveTab("tickets")}>{locale === "en" ? "Tickets" : "Tiket"}{openTickets.length > 0 && <span className="tab-count">{openTickets.length}</span>}</button>
+      </div>
+      {activeTab === "units" && singleUnitView}
+      {activeTab === "units" && <div className="property-unit-layout"><div className="property-unit-list"><Toolbar search={unitSearch} setSearch={setUnitSearch} />{filteredUnits.length ? <DataTable rows={filteredUnits} selected={selected?.id} onSelect={row => setSelectedId(row.id)} onEdit={row => { setSelectedId(row.id); isVacant(row) ? onBook({ propertyId: property.id, unitId: row.id }) : notify(locale === "en" ? "This unit is occupied. Use the lease to manage its tenant." : "Unit ini terisi. Kelola penyewanya melalui sewa."); }} onDelete={row => { setUnits(old => old.filter(r => r.id !== row.id)); notify(message(locale, "unitRemoved", { unit: row.unit })); }} /> : <div className="empty"><Building2 /><div><strong>{unitSearch ? t("Belum ada data yang cocok") : t("Belum ada unit")}</strong><span>{unitSearch ? t("Ubah pencarian atau filter untuk melihat properti lain.") : t("Tambahkan unit pada properti ini untuk mulai membuat pemesanan.")}</span></div></div>}</div><aside className="property-unit-detail">{selected ? <><div className="panel-head"><div><h2>{t("Detail unit")} {selected.unit}</h2><p>{v(selected.tipe)} · {t("Lantai")} {selected.lantai}</p></div><MoreHorizontal /></div><div className="detail-section"><div className="detail-title">{t("Status hunian")} <Status>{selected.status}</Status></div><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(selected.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(selected.sewa)}</span><span>Deposit</span><span>{v(selected.deposit || formatRp(unitDeposit(selected, property)))}</span><span>{t("Tunggakan")}</span><span className={selected.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(selected.tunggakan)}</span></div>{isVacant(selected) && <button className="button primary unit-booking-action" onClick={() => onBook({ propertyId: property.id, unitId: selected.id })}><CalendarPlus />{t("Pesan unit ini")}</button>}</div><div className="detail-section"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div></> : <div className="empty"><Building2 /><div><strong>{locale === "en" ? "Select a unit" : "Pilih unit"}</strong><span>{locale === "en" ? "Select a row to view the unit details." : "Pilih baris untuk melihat detail unit."}</span></div></div>}</aside></div>}
+      {activeTab === "invoices" && (propertyInvoices.length ? <div className="table-wrap"><table><thead><tr><th>ID</th><th>{t("Penyewa")}</th><th>Unit</th><th>{t("Periode")}</th><th>{t("Jatuh tempo")}</th><th>Total</th><th>Sisa</th><th>Status</th></tr></thead><tbody>{propertyInvoices.map(inv => <tr key={inv.id}><td><span className="ticket-id">{inv.id}</span></td><td>{v(inv.penyewa)}</td><td>{v(inv.unit)}</td><td>{v(inv.periode)}</td><td>{v(inv.jatuhTempo)}</td><td>{v(inv.total)}</td><td className={inv.sisa !== "Rp0" ? "money-danger" : ""}>{v(inv.sisa)}</td><td><Status>{inv.status}</Status></td></tr>)}</tbody></table></div> : <div className="empty"><CreditCard /><div><strong>{locale === "en" ? "No invoices" : "Belum ada tagihan"}</strong><span>{locale === "en" ? "Invoices for units in this property appear here." : "Tagihan unit properti ini akan muncul di sini."}</span></div></div>)}
+      {activeTab === "tickets" && (propertyTickets.length ? <div className="table-wrap"><table><thead><tr><th>Tiket</th><th>Judul</th><th>Unit</th><th>{t("Penyewa")}</th><th>Vendor</th><th>Status</th></tr></thead><tbody>{propertyTickets.map(tkt => <tr key={tkt.id}><td><span className="ticket-id">{v(tkt.tiket)}</span></td><td>{v(tkt.judul)}</td><td>{v(tkt.unit)}</td><td>{v(tkt.penyewa)}</td><td>{v(tkt.vendor)}</td><td><Status>{tkt.status}</Status></td></tr>)}</tbody></table></div> : <div className="empty"><Wrench /><div><strong>{locale === "en" ? "No tickets" : "Belum ada tiket"}</strong><span>{locale === "en" ? "Maintenance tickets for this property appear here." : "Tiket pemeliharaan properti ini akan muncul di sini."}</span></div></div>)}
+    </section>
   </>;
 }
 
@@ -1107,7 +1179,7 @@ function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRo
   const filtered = rows.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(search.toLowerCase())));
   const markPaid = () => { setRows(old => old.map(r => r.id === selected.id ? { ...r, sisa: "Rp0", status: "Lunas" } : r)); setSelected({ ...selected, sisa: "Rp0", status: "Lunas" }); notify(message(locale, "paid", { invoice: selected.id })); };
   return <><PageHead page="invoices" action={() => openDialog({ mode: "create", page: "invoices" })} /><div className="stats-strip"><div className="stat"><span>{t("Terlambat")}</span><strong>2</strong><small style={{ color: "var(--danger)" }}>{v("Rp1,55 jt")}</small></div><div className="stat"><span>{t("Jatuh tempo 7 hari")}</span><strong>1</strong></div><div className="stat"><span>{t("Belum dibayar")}</span><strong>3</strong></div><div className="stat"><span>{t("Lunas bulan ini")}</span><strong>18</strong><small>{v("Rp31,2 jt")}</small></div></div>
-    <div className="split"><section className="panel"><Toolbar search={search} setSearch={setSearch} /><DataTable rows={filtered} selected={selected.id} onSelect={setSelected} onEdit={row => openDialog({ mode: "edit", page: "invoices", row })} onDelete={row => { setRows(old => old.filter(r => r.id !== row.id)); notify(locale === "en" ? "Invoice deleted." : "Tagihan dihapus."); }} /></section>
+    <div className="split"><section className="panel"><Toolbar search={search} setSearch={setSearch} /><DataTable rows={filtered} module="invoices" selected={selected.id} onSelect={setSelected} onEdit={row => openDialog({ mode: "edit", page: "invoices", row })} onDelete={row => { setRows(old => old.filter(r => r.id !== row.id)); notify(locale === "en" ? "Invoice deleted." : "Tagihan dihapus."); }} /></section>
       <aside className="detail-pane"><div className="panel-head"><div><h2>{selected.id}</h2><p>{v(selected.periode)}</p></div><Status>{selected.status}</Status></div><div className="detail-section"><div className="detail-title">{selected.penyewa}</div><div className="detail-grid"><span>{t("Unit")}</span><span>{selected.unit}</span><span>{t("Jatuh tempo")}</span><span>{v(selected.jatuhTempo)}</span><span>{locale === "en" ? "Invoice total" : "Total tagihan"}</span><span>{v(selected.total)}</span><span>{t("Sisa tagihan")}</span><span className={selected.sisa !== "Rp0" ? "money-danger" : ""}>{v(selected.sisa)}</span></div></div>
         <div className="detail-section"><div className="detail-title">{t("Tautan pembayaran")}</div><div style={{ padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 16, fontSize: ".75rem", overflow: "hidden", textOverflow: "ellipsis" }}>sewain.id/bayar/{selected.id}</div><div className="actions" style={{ marginTop: 12 }}><button className="button" onClick={() => notify(locale === "en" ? "Payment link copied." : "Tautan pembayaran disalin.")}>{t("Salin tautan")}</button><button className="button" onClick={() => notify(message(locale, "reminder", { name: selected.penyewa }))}><MessageSquareText />{t("Kirim pengingat")}</button></div></div>
         <div className="detail-section"><div className="detail-title">{t("Riwayat pembayaran")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Pembayaran transfer")}</strong><span className="cell-sub">{t("Sebagian")} · {v("Rp1.200.000")}</span></span><time>6 Jun</time></div><div className="activity"><span className="activity-icon"><FileText /></span><span><strong>{t("Tagihan dibuat")}</strong><span className="cell-sub">{t("Otomatis dari sewa aktif")}</span></span><time>1 Jun</time></div></div>
@@ -1115,7 +1187,130 @@ function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRo
       </aside></div></>;
 }
 
+<<<<<<< HEAD
 function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { notify: (s: string) => void; integrationConfig: IntegrationConfig; setIntegrationConfig: (config: IntegrationConfig) => void }) {
+=======
+const actionLabel: Record<PermissionAction, string> = { view: "Lihat", create: "Tambah", edit: "Ubah", delete: "Hapus" };
+const memberStatusLabel: Record<MemberStatus, string> = { active: "Aktif", invited: "Diundang", inactive: "Nonaktif" };
+
+function MemberDialog({ member, roles, onClose, onSave }: { member?: Member; roles: Role[]; onClose: () => void; onSave: (m: Member) => void }) {
+  const { locale, t, v } = useI18n();
+  const [name, setName] = useState(member?.name || "");
+  const [email, setEmail] = useState(member?.email || "");
+  const [roleId, setRoleId] = useState(member?.roleId || roles[0]?.id || "");
+  const [status, setStatus] = useState<MemberStatus>(member?.status || "invited");
+  const submit = (e: React.FormEvent) => { e.preventDefault(); if (!name.trim() || !email.trim()) return; onSave({ id: member?.id || `m-${Date.now()}`, name: name.trim(), email: email.trim(), roleId, status }); };
+  return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}><form className="dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="member-dialog-title">
+    <div className="dialog-head"><div><h2 id="member-dialog-title">{member ? (locale === "en" ? "Edit member" : "Edit anggota") : (locale === "en" ? "Invite member" : "Undang anggota")}</h2><p>{locale === "en" ? "Assign a role to control what this member can access." : "Tetapkan peran untuk mengatur akses anggota ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div>
+    <div className="dialog-body"><div className="form-grid">
+      <div className="form-field full"><label htmlFor="member-name">{t("Nama lengkap")}</label><input id="member-name" value={name} autoComplete="name" onChange={e => setName(e.target.value)} required /></div>
+      <div className="form-field full"><label htmlFor="member-email">Email</label><input id="member-email" type="email" value={email} autoComplete="email" onChange={e => setEmail(e.target.value)} required /></div>
+      <div className="form-field"><label htmlFor="member-role">{locale === "en" ? "Role" : "Peran"}</label><select id="member-role" value={roleId} onChange={e => setRoleId(e.target.value)}>{roles.map(r => <option key={r.id} value={r.id}>{v(r.name)}</option>)}</select></div>
+      <div className="form-field"><label htmlFor="member-status">{t("Status")}</label><select id="member-status" value={status} onChange={e => setStatus(e.target.value as MemberStatus)}>{(["active", "invited", "inactive"] as MemberStatus[]).map(s => <option key={s} value={s}>{t(memberStatusLabel[s])}</option>)}</select></div>
+    </div></div>
+    <div className="dialog-actions"><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button type="submit" className="button primary">{member ? t("Simpan perubahan") : (locale === "en" ? "Send invite" : "Kirim undangan")}</button></div>
+  </form></div>;
+}
+
+function MembersPanel({ notify }: { notify: (s: string) => void }) {
+  const { locale, t, v } = useI18n();
+  const { roles, members, currentUserId, setMembers, setCurrentUserId, can } = useAccess();
+  const [dialog, setDialog] = useState<{ member?: Member } | null>(null);
+  const canManage = can("settings", "edit");
+  const roleName = (id: string) => roles.find(r => r.id === id)?.name || "—";
+  const updateMember = (id: string, patch: Partial<Member>) => setMembers(members.map(m => m.id === id ? { ...m, ...patch } : m));
+  const removeMember = (m: Member) => {
+    if (m.roleId === "owner" && members.filter(x => x.roleId === "owner").length === 1) { notify(locale === "en" ? "Cannot remove the last owner." : "Tidak bisa menghapus pemilik terakhir."); return; }
+    if (!window.confirm(locale === "en" ? `Remove ${m.name}?` : `Hapus ${m.name}?`)) return;
+    const next = members.filter(x => x.id !== m.id);
+    setMembers(next);
+    if (currentUserId === m.id && next[0]) setCurrentUserId(next[0].id);
+    notify(locale === "en" ? "Member removed." : "Anggota dihapus.");
+  };
+  const saveMember = (member: Member) => {
+    setMembers(members.some(m => m.id === member.id) ? members.map(m => m.id === member.id ? member : m) : [...members, member]);
+    setDialog(null);
+    notify(locale === "en" ? "Member saved." : "Anggota disimpan.");
+  };
+  return <div className="access-panel">
+    <div className="panel-head"><div><h2>{locale === "en" ? "Members" : "Anggota"}</h2><p>{members.length} {locale === "en" ? "members" : "anggota"}</p></div>{canManage && <button className="button primary" onClick={() => setDialog({})}><Plus />{locale === "en" ? "Invite member" : "Undang anggota"}</button>}</div>
+    <div className="table-wrap"><table>
+      <thead><tr><th>{t("Nama")}</th><th>Email</th><th>{locale === "en" ? "Role" : "Peran"}</th><th>{t("Status")}</th><th>{t("Aksi")}</th></tr></thead>
+      <tbody>{members.map(m => <tr key={m.id}>
+        <td><span className="tenant-name"><span className="avatar small">{initials(m.name)}</span><strong>{v(m.name)}</strong></span></td>
+        <td>{v(m.email)}</td>
+        <td>{canManage ? <select value={m.roleId} aria-label={`${locale === "en" ? "Role for" : "Peran untuk"} ${m.name}`} onChange={e => updateMember(m.id, { roleId: e.target.value })}>{roles.map(r => <option key={r.id} value={r.id}>{v(r.name)}</option>)}</select> : v(roleName(m.roleId))}</td>
+        <td>{canManage ? <select value={m.status} aria-label={`Status ${m.name}`} onChange={e => updateMember(m.id, { status: e.target.value as MemberStatus })}>{(["active", "invited", "inactive"] as MemberStatus[]).map(s => <option key={s} value={s}>{t(memberStatusLabel[s])}</option>)}</select> : <Status>{memberStatusLabel[m.status]}</Status>}</td>
+        <td><div className="actions">{canManage ? <><button className="icon-button" aria-label={`${t("Edit")} ${m.name}`} onClick={() => setDialog({ member: m })}><Pencil /></button><button className="icon-button" aria-label={`${t("Hapus")} ${m.name}`} onClick={() => removeMember(m)}><Trash2 /></button></> : <span className="cell-sub">{t("Hanya lihat")}</span>}</div></td>
+      </tr>)}</tbody>
+    </table></div>
+    {dialog && <MemberDialog member={dialog.member} roles={roles} onClose={() => setDialog(null)} onSave={saveMember} />}
+  </div>;
+}
+
+function RolesPanel({ notify }: { notify: (s: string) => void }) {
+  const { locale, t, v } = useI18n();
+  const { roles, members, currentRole, setRoles, can } = useAccess();
+  const [selectedId, setSelectedId] = useState(roles[0]?.id || "");
+  const canManage = can("settings", "edit");
+  const isActingOwner = currentRole?.id === "owner";
+  const selected = roles.find(r => r.id === selectedId) || roles[0];
+  const memberCount = (roleId: string) => members.filter(m => m.roleId === roleId).length;
+  const ownerLocked = selected?.id === "owner";
+  const systemLocked = Boolean(selected?.system) && !isActingOwner;
+  const editable = canManage && !ownerLocked && !systemLocked;
+  const update = (next: Role) => setRoles(roles.map(r => r.id === next.id ? next : r));
+  const toggle = (module: ModuleId, action: PermissionAction) => {
+    if (!selected || !editable) return;
+    const current = selected.permissions[module];
+    const value = !current[action];
+    const updatedModule = { ...current, [action]: value };
+    if (action === "view" && !value) { updatedModule.create = false; updatedModule.edit = false; updatedModule.delete = false; }
+    if (action !== "view" && value) updatedModule.view = true;
+    update({ ...selected, permissions: { ...selected.permissions, [module]: updatedModule } });
+  };
+  const createRole = () => {
+    const id = `role-${Date.now()}`;
+    setRoles([...roles, { id, name: locale === "en" ? "New role" : "Peran baru", description: "", system: false, permissions: emptyPermissions() }]);
+    setSelectedId(id);
+    notify(locale === "en" ? "Role created." : "Peran dibuat.");
+  };
+  const deleteRole = () => {
+    if (!selected || selected.system) return;
+    if (memberCount(selected.id)) { notify(locale === "en" ? "Reassign members before deleting this role." : "Pindahkan anggota sebelum menghapus peran ini."); return; }
+    if (!window.confirm(locale === "en" ? `Delete role "${selected.name}"?` : `Hapus peran "${selected.name}"?`)) return;
+    const next = roles.filter(r => r.id !== selected.id);
+    setRoles(next);
+    setSelectedId(next[0]?.id || "");
+    notify(locale === "en" ? "Role deleted." : "Peran dihapus.");
+  };
+  return <div className="access-panel roles-layout">
+    <div className="role-list">
+      <div className="panel-head"><h2>{locale === "en" ? "Roles" : "Peran"}</h2>{canManage && <button className="button" onClick={createRole}><Plus />{locale === "en" ? "Create role" : "Buat peran"}</button>}</div>
+      {roles.map(r => <button key={r.id} className={`role-card ${selectedId === r.id ? "active" : ""}`} onClick={() => setSelectedId(r.id)}>
+        <span className="role-card-head"><ShieldCheck /><strong>{v(r.name)}</strong>{r.system && <span className="role-badge">{locale === "en" ? "System" : "Sistem"}</span>}</span>
+        <span className="cell-sub">{r.description ? v(r.description) : (locale === "en" ? "Custom role" : "Peran khusus")}</span>
+        <span className="cell-sub">{memberCount(r.id)} {locale === "en" ? "members" : "anggota"}</span>
+      </button>)}
+    </div>
+    {selected && <div className="role-detail">
+      <div className="form-grid">
+        <div className="form-field"><label htmlFor="role-name">{locale === "en" ? "Role name" : "Nama peran"}</label><input id="role-name" value={v(selected.name)} disabled={!editable} onChange={e => update({ ...selected, name: e.target.value })} /></div>
+        <div className="form-field"><label htmlFor="role-desc">{locale === "en" ? "Description" : "Deskripsi"}</label><input id="role-desc" value={v(selected.description)} disabled={!editable} onChange={e => update({ ...selected, description: e.target.value })} /></div>
+      </div>
+      {ownerLocked && <p className="subtext">{locale === "en" ? "The Owner role always has full access and cannot be edited." : "Peran Pemilik selalu memiliki akses penuh dan tidak dapat diubah."}</p>}
+      {systemLocked && !ownerLocked && <p className="subtext">{locale === "en" ? "Only an Owner can change built-in roles." : "Hanya Pemilik yang dapat mengubah peran bawaan."}</p>}
+      <div className="table-wrap"><table className="permission-matrix">
+        <thead><tr><th>{locale === "en" ? "Module" : "Modul"}</th>{PERMISSION_ACTIONS.map(a => <th key={a}>{t(actionLabel[a])}</th>)}</tr></thead>
+        <tbody>{PERMISSION_MODULES.map(mod => <tr key={mod.id}><td>{t(mod.label)}</td>{PERMISSION_ACTIONS.map(a => { const checked = ownerLocked ? true : selected.permissions[mod.id][a]; return <td key={a}><input type="checkbox" aria-label={`${t(mod.label)} ${t(actionLabel[a])}`} checked={checked} disabled={!editable} onChange={() => toggle(mod.id, a)} /></td>; })}</tr>)}</tbody>
+      </table></div>
+      {!selected.system && canManage && <div className="actions" style={{ marginTop: 16 }}><button className="button danger" onClick={deleteRole}><Trash2 />{locale === "en" ? "Delete role" : "Hapus peran"}</button></div>}
+    </div>}
+  </div>;
+}
+
+function SettingsPage({ notify }: { notify: (s: string) => void }) {
+>>>>>>> 0b1620d (Add calendar and role permission layouts)
   const { locale, t, v } = useI18n();
   const { config: tokenConfig, setConfig: setTokenConfig } = useTokenConfig();
   const [tab, setTab] = useState("Organisasi");
@@ -1125,6 +1320,7 @@ function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { not
     if (n > 0 && !tokenConfig.nominals.includes(n)) setTokenConfig({ ...tokenConfig, nominals: [...tokenConfig.nominals, n] });
     setNominalInput("");
   };
+<<<<<<< HEAD
   const testTelegram = async () => {
     try {
       const response = await fetch(`${integrationConfig.botUrl}/api/health`);
@@ -1135,6 +1331,10 @@ function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { not
     }
   };
   return <><PageHead page="settings" /><section className="panel"><div className="tabs">{["Organisasi", "Penagihan", "Token PLN", "Integrasi", "Pengguna"].map(item => <button key={item} onClick={() => setTab(item)} className={`tab ${tab === item ? "active" : ""}`}>{t(item)}</button>)}</div><div className="dialog-body" style={{ maxWidth: 720 }}>
+=======
+  const configTab = ["Organisasi", "Penagihan", "Token PLN", "Integrasi"].includes(tab);
+  return <><PageHead page="settings" /><section className="panel"><div className="tabs">{["Organisasi", "Penagihan", "Token PLN", "Integrasi", "Pengguna", "Peran"].map(item => <button key={item} onClick={() => setTab(item)} className={`tab ${tab === item ? "active" : ""}`}>{t(item)}</button>)}</div><div className="dialog-body" style={{ maxWidth: configTab ? 720 : "100%" }}>
+>>>>>>> 0b1620d (Add calendar and role permission layouts)
     {tab === "Organisasi" && <div className="form-grid"><Field label="Nama organisasi" value="PT Makmur Sejahtera" autoComplete="organization" /><Field label="Zona waktu" value="Asia/Jakarta" options={["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"]} /><Field full multiline label="Alamat" value="Jl. Melati No. 45, Depok, Jawa Barat" autoComplete="street-address" /></div>}
     {tab === "Penagihan" && <div className="form-grid"><Field label="Tanggal pembuatan tagihan" value="1" type="number" /><Field label="Jatuh tempo standar" value="Tanggal 5" options={["Tanggal 1", "Tanggal 5", "Tanggal 10", "Tanggal 15"]} /><Field label="Pengingat pertama" value="3 hari sebelum" options={["1 hari sebelum", "3 hari sebelum", "7 hari sebelum"]} /><Field label="Pengingat terlambat" value="Setiap 3 hari" options={["Setiap hari", "Setiap 3 hari", "Setiap 7 hari"]} /></div>}
     {tab === "Token PLN" && <div className="form-grid">
@@ -1152,9 +1352,16 @@ function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { not
         <p className="subtext">{locale === "en" ? "Manage the global platform fee from the Token PLN page using the \"Manage fee\" button." : "Kelola biaya platform global dari halaman Token PLN menggunakan tombol \"Kelola biaya\"."}</p>
       </div>
     </div>}
+<<<<<<< HEAD
     {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><Bot /></span><span><strong>Telegram Bot @theDaedalus_bot</strong><span className="cell-sub">Kirim notifikasi ke penyewa via Telegram</span></span><span className={`badge ${integrationConfig.apiKey ? "success" : ""}`}>{integrationConfig.apiKey ? "Terhubung" : "Belum terkonfigurasi"}</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="telegram-bot-url">Bot API URL</label><input id="telegram-bot-url" type="text" value={integrationConfig.botUrl} onChange={event => setIntegrationConfig({ ...integrationConfig, botUrl: event.target.value })} /></div><div className="form-field full"><label htmlFor="telegram-api-key">API Key</label><input id="telegram-api-key" type="password" value={integrationConfig.apiKey} onChange={event => setIntegrationConfig({ ...integrationConfig, apiKey: event.target.value })} /></div></div><div className="actions" style={{ marginTop: 12, marginBottom: 16 }}><button type="button" className="button" onClick={testTelegram}>Uji Koneksi</button></div><hr /><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>{locale === "en" ? "PPOB (utility payments)" : "PPOB"} · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Token PLN tidak diterbitkan secara nyata")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "PPOB test succeeded." : "Tes PPOB berhasil.")}>{t("Tes")}</button></div></div>}
     {tab === "Pengguna" && <div><div className="activity"><span className="avatar">AT</span><span><strong>Andi Triono</strong><span className="cell-sub">andi@sewain.id · {t("Pemilik")}</span></span><Status>Aktif</Status></div><div className="activity"><span className="avatar">RN</span><span><strong>Rina Novita</strong><span className="cell-sub">rina@sewain.id · {t("Admin")}</span></span><Status>Aktif</Status></div></div>}
     <div className="actions" style={{ marginTop: 20 }}><button className="button primary" onClick={() => notify(message(locale, "settings", { section: t(tab) }))}>{t("Simpan perubahan")}</button></div>
+=======
+    {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>{locale === "en" ? "PPOB (utility payments)" : "PPOB"} · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Token PLN tidak diterbitkan secara nyata")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "PPOB test succeeded." : "Tes PPOB berhasil.")}>{t("Tes")}</button></div></div>}
+    {tab === "Pengguna" && <MembersPanel notify={notify} />}
+    {tab === "Peran" && <RolesPanel notify={notify} />}
+    {configTab && <div className="actions" style={{ marginTop: 20 }}><button className="button primary" onClick={() => notify(message(locale, "settings", { section: t(tab) }))}>{t("Simpan perubahan")}</button></div>}
+>>>>>>> 0b1620d (Add calendar and role permission layouts)
   </div></section></>;
 }
 
@@ -1916,6 +2123,126 @@ function EditDialog(props: { state: Exclude<DialogState, null>; onClose: () => v
   return props.state.page === "properties" ? <PropertyDialog {...props} /> : props.state.page === "tenants" ? <TenantDialog {...props} /> : props.state.page === "tickets" ? <TicketDialog {...props} /> : props.state.page === "tokens" ? <TokenOrderDialog {...props} /> : <GenericEditDialog {...props} />;
 }
 
+type CalendarEventKind = "payment" | "maintenance" | "contract" | "move";
+type CalendarEvent = {
+  id: string;
+  date: string;
+  title: string;
+  titleEn: string;
+  detail: string;
+  kind: CalendarEventKind;
+  target: PageId;
+  status: "ongoing" | "upcoming";
+  time?: string;
+};
+
+const calendarEvents: CalendarEvent[] = [
+  { id: "cal-1", date: "2026-06-22", title: "Perbaikan pipa bocor", titleEn: "Leaking pipe repair", detail: "Kost Menteng Indah · Unit 109", kind: "maintenance", target: "tickets", status: "ongoing", time: "09.00–12.00" },
+  { id: "cal-2", date: "2026-06-22", title: "8 tagihan jatuh tempo", titleEn: "8 invoices due", detail: "3 properti · Rp9.600.000", kind: "payment", target: "invoices", status: "ongoing", time: "Hari ini" },
+  { id: "cal-3", date: "2026-06-24", title: "Kunjungan teknisi AC", titleEn: "AC technician visit", detail: "Villa Bintaro Residence · Unit 204", kind: "maintenance", target: "tickets", status: "upcoming", time: "10.30" },
+  { id: "cal-4", date: "2026-06-25", title: "Pengingat pembayaran", titleEn: "Payment reminder", detail: "12 penyewa belum membayar", kind: "payment", target: "invoices", status: "upcoming", time: "08.00" },
+  { id: "cal-5", date: "2026-06-26", title: "Serah terima unit", titleEn: "Unit handover", detail: "Apartemen Setiabudi · Unit A-18", kind: "move", target: "reservations", status: "upcoming", time: "14.00" },
+  { id: "cal-6", date: "2026-06-28", title: "3 kontrak berakhir", titleEn: "3 contracts expire", detail: "Perlu keputusan perpanjangan", kind: "contract", target: "contracts", status: "upcoming" },
+  { id: "cal-7", date: "2026-07-01", title: "Tagihan sewa diterbitkan", titleEn: "Rent invoices issued", detail: "Seluruh penyewa aktif", kind: "payment", target: "invoices", status: "upcoming", time: "Otomatis" },
+  { id: "cal-8", date: "2026-07-03", title: "Inspeksi unit keluar", titleEn: "Move-out inspection", detail: "Kos Melati · Unit 104", kind: "move", target: "reservations", status: "upcoming", time: "13.00" },
+];
+
+const calendarKindMeta: Record<CalendarEventKind, { label: string; labelEn: string; icon: typeof CalendarDays }> = {
+  payment: { label: "Pembayaran", labelEn: "Payment", icon: CircleDollarSign },
+  maintenance: { label: "Pemeliharaan", labelEn: "Maintenance", icon: Wrench },
+  contract: { label: "Kontrak", labelEn: "Contract", icon: FileType2 },
+  move: { label: "Masuk / keluar", labelEn: "Move in / out", icon: UserCheck },
+};
+
+const calendarDateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+function CalendarPage({ onOpenEvent }: { onOpenEvent: (event: CalendarEvent) => void }) {
+  const { locale } = useI18n();
+  const L = (id: string, en: string) => locale === "en" ? en : id;
+  const [month, setMonth] = useState(() => new Date(2026, 5, 1));
+  const [selectedDate, setSelectedDate] = useState("2026-06-22");
+  const monthName = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "id-ID", { month: "long", year: "numeric" }).format(month);
+  const selectedLabel = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "id-ID", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${selectedDate}T12:00:00`));
+  const firstDayOffset = (month.getDay() + 6) % 7;
+  const gridStart = new Date(month.getFullYear(), month.getMonth(), 1 - firstDayOffset);
+  const days = Array.from({ length: 42 }, (_, index) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index));
+  const eventsByDate = useMemo(() => calendarEvents.reduce<Record<string, CalendarEvent[]>>((result, event) => {
+    (result[event.date] ||= []).push(event);
+    return result;
+  }, {}), []);
+  const selectedEvents = eventsByDate[selectedDate] || [];
+  const ongoing = selectedEvents.filter(event => event.status === "ongoing");
+  const upcoming = selectedEvents.filter(event => event.status === "upcoming");
+  const todayKey = calendarDateKey(new Date());
+  const upcomingEnd = new Date(`${todayKey}T12:00:00`);
+  upcomingEnd.setDate(upcomingEnd.getDate() + 7);
+  const upcomingEndKey = calendarDateKey(upcomingEnd);
+  const nextSevenDays = calendarEvents.filter(event => event.status === "upcoming" && event.date > todayKey && event.date <= upcomingEndKey);
+  const moveMonth = (amount: number) => setMonth(current => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+  const goToday = () => {
+    const today = new Date();
+    setMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedDate(calendarDateKey(today));
+  };
+
+  return <div className="calendar-page">
+    <div className="page-head calendar-page-head">
+      <div><span className="eyebrow">{L("Operasional", "Operations")}</span><h1>{L("Kalender", "Calendar")}</h1><p className="subtext">{L("Pantau jadwal pembayaran, kontrak, dan pekerjaan lapangan.", "Track payments, contracts, and field work in one place.")}</p></div>
+      <button className="button" onClick={goToday}><CalendarDays />{L("Hari ini", "Today")}</button>
+    </div>
+
+    <div className="calendar-layout">
+      <section className="calendar-panel" aria-label={L("Kalender operasional", "Operations calendar")}>
+        <div className="calendar-toolbar">
+          <div className="calendar-month-controls"><button className="icon-button calendar-arrow" onClick={() => moveMonth(-1)} aria-label={L("Bulan sebelumnya", "Previous month")}><ChevronLeft /></button><h2>{monthName}</h2><button className="icon-button calendar-arrow" onClick={() => moveMonth(1)} aria-label={L("Bulan berikutnya", "Next month")}><ChevronRight /></button></div>
+          <div className="calendar-legend">{Object.entries(calendarKindMeta).map(([kind, meta]) => <span key={kind}><i className={`calendar-dot ${kind}`} />{locale === "en" ? meta.labelEn : meta.label}</span>)}</div>
+        </div>
+        <div className="calendar-scroll">
+          <div className="calendar-grid calendar-weekdays">{(locale === "en" ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"]).map(day => <span key={day}>{day}</span>)}</div>
+          <div className="calendar-grid calendar-days">{days.map(date => {
+            const key = calendarDateKey(date);
+            const dayEvents = eventsByDate[key] || [];
+            const outside = date.getMonth() !== month.getMonth();
+            const selected = selectedDate === key;
+            const dateLabel = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" }).format(date);
+            return <button key={key} className={`calendar-day ${outside ? "outside" : ""} ${selected ? "selected" : ""}`} onClick={() => setSelectedDate(key)} aria-pressed={selected} aria-label={dateLabel}>
+              <span className="calendar-day-number">{date.getDate()}</span>
+              <span className="calendar-day-events">{dayEvents.slice(0, 2).map(event => <span className={`calendar-chip ${event.kind}`} key={event.id}><i />{locale === "en" ? event.titleEn : event.title}</span>)}{dayEvents.length > 2 && <span className="calendar-more">+{dayEvents.length - 2} {L("lainnya", "more")}</span>}</span>
+            </button>;
+          })}</div>
+        </div>
+      </section>
+
+      <aside className="calendar-agenda">
+        <section className="agenda-card">
+          <div className="agenda-heading"><div><span className="eyebrow">{L("Agenda terpilih", "Selected agenda")}</span><h2>{selectedLabel}</h2></div><span className="agenda-count">{selectedEvents.length}</span></div>
+          {selectedEvents.length ? <>
+            {ongoing.length > 0 && <div className="agenda-section"><div className="agenda-section-title"><span>{L("Sedang berlangsung", "Ongoing")}</span><i className="live-dot" /></div><div className="agenda-list">{ongoing.map(event => <CalendarAgendaItem event={event} key={event.id} onOpen={() => onOpenEvent(event)} />)}</div></div>}
+            {upcoming.length > 0 && <div className="agenda-section"><div className="agenda-section-title"><span>{L("Terjadwal", "Scheduled")}</span></div><div className="agenda-list">{upcoming.map(event => <CalendarAgendaItem event={event} key={event.id} onOpen={() => onOpenEvent(event)} />)}</div></div>}
+          </> : <div className="agenda-empty"><span className="agenda-empty-icon"><CalendarDays /></span><strong>{L("Tidak ada agenda", "No events scheduled")}</strong><span>{L("Belum ada pembayaran, kontrak, atau pekerjaan yang dijadwalkan pada hari ini.", "No payments, contracts, or field work are scheduled for this day.")}</span></div>}
+        </section>
+
+        <section className="agenda-card upcoming-card">
+          <div className="agenda-heading"><div><span className="eyebrow">{L("Mendatang", "Upcoming")}</span><h2>{L("7 hari ke depan", "Next 7 days")}</h2></div><span className="agenda-count">{nextSevenDays.length}</span></div>
+          {nextSevenDays.length ? <div className="agenda-section"><div className="agenda-list">{nextSevenDays.map(event => <CalendarAgendaItem event={event} key={event.id} onOpen={() => onOpenEvent(event)} />)}</div></div> : <div className="agenda-empty compact"><span className="agenda-empty-icon"><CalendarClock /></span><strong>{L("Tidak ada agenda mendatang", "No upcoming events")}</strong><span>{L("Tidak ada event lain dalam tujuh hari berikutnya.", "There are no other events in the next seven days.")}</span></div>}
+        </section>
+      </aside>
+    </div>
+  </div>;
+}
+
+function CalendarAgendaItem({ event, onOpen }: { event: CalendarEvent; onOpen: () => void }) {
+  const { locale } = useI18n();
+  const meta = calendarKindMeta[event.kind];
+  const Icon = meta.icon;
+  const date = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "id-ID", { day: "numeric", month: "short" }).format(new Date(`${event.date}T12:00:00`));
+  return <button type="button" className={`agenda-item ${event.status === "ongoing" ? "is-ongoing" : ""}`} onClick={onOpen} aria-label={`${locale === "en" ? "Open" : "Buka"} ${locale === "en" ? event.titleEn : event.title}`}>
+    <span className={`agenda-icon ${event.kind}`}><Icon /></span>
+    <span className="agenda-copy"><strong>{locale === "en" ? event.titleEn : event.title}</strong><span>{event.detail}</span><small>{date}{event.time ? ` · ${event.time}` : ""}</small></span>
+    <ChevronRight className="agenda-open-icon" />
+  </button>;
+}
+
 function SewainContent() {
   const { locale, setLocale, t } = useI18n();
   const [page, setPage] = useState<PageId>("dashboard");
@@ -1928,6 +2255,8 @@ function SewainContent() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [readNotifications, setReadNotifications] = useState<string[]>([]);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const [actingAsOpen, setActingAsOpen] = useState(false);
+  const actingAsRef = useRef<HTMLDivElement>(null);
   const [propertyRows, setPropertyRows] = useStoredRows("properties", seedProperties);
   const [tokenConfig, setTokenConfig] = useStoredConfig<TokenConfig>("token-config", defaultTokenConfig);
   const [invoiceRows, setInvoiceRows] = useStoredRows("invoices", seedInvoices);
@@ -1935,11 +2264,27 @@ function SewainContent() {
   const [reservations, setReservations] = useStoredRows("reservations", moduleData.reservations);
   const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
   const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
+<<<<<<< HEAD
   const [templates, setTemplates] = useStoredConfig<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
   const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
+=======
+  const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
+>>>>>>> 0b1620d (Add calendar and role permission layouts)
   const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
   const [documents, setDocuments] = useStoredRows("documents", moduleData.documents);
   const [units, setUnits] = useStoredRows("units", seedUnits);
+  const [roles, setRoles] = useStoredState<Role[]>("roles-v1", SEED_ROLES);
+  const [members, setMembers] = useStoredState<Member[]>("members-v1", SEED_MEMBERS);
+  const [currentUserId, setCurrentUserId] = useStoredState<string>("current-user-v1", SEED_MEMBERS[0].id);
+  const access = useMemo<AccessCtx>(() => {
+    const currentMember = members.find(member => member.id === currentUserId) ?? members[0];
+    const currentRole = roles.find(role => role.id === currentMember?.roleId);
+    return {
+      roles, members, currentUserId, currentMember, currentRole,
+      setRoles, setMembers, setCurrentUserId,
+      can: (module, action) => roleCan(currentRole, module, action),
+    };
+  }, [roles, members, currentUserId, setRoles, setMembers, setCurrentUserId]);
   useEffect(() => {
     setSidebarCollapsed(localStorage.getItem("sewain:sidebar-collapsed") === "true");
     try { setReadNotifications(JSON.parse(localStorage.getItem("sewain:read-notifications") || "[]")); } catch { setReadNotifications([]); }
@@ -1959,6 +2304,16 @@ function SewainContent() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [notificationsOpen]);
+  useEffect(() => {
+    if (!actingAsOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!actingAsRef.current?.contains(event.target as Node)) setActingAsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setActingAsOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", closeOnEscape); };
+  }, [actingAsOpen]);
   const stores: Partial<Record<PageId, [Row[], React.Dispatch<React.SetStateAction<Row[]>>]>> = useMemo(() => ({ properties: [propertyRows, setPropertyRows], invoices: [invoiceRows, setInvoiceRows], tenants: [tenants, setTenants], reservations: [reservations, setReservations], tokens: [tokens, setTokens], contracts: [contracts, setContracts], tickets: [tickets, setTickets], documents: [documents, setDocuments] }), [propertyRows, invoiceRows, tenants, reservations, tokens, contracts, tickets, documents, setPropertyRows, setInvoiceRows, setTenants, setReservations, setTokens, setContracts, setTickets, setDocuments]);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
   const go = (id: PageId) => { setPage(id); setMobileNav(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -1983,18 +2338,20 @@ function SewainContent() {
   const save = (target: PageId, row: Row) => { const store = stores[target]; if (!store) return; const [, setter] = store; setter(old => row._delete ? old.filter(item => item.id !== row.id) : old.some(r => r.id === row.id) ? old.map(r => r.id === row.id ? row : r) : [row, ...old]); setDialog(null); notify(row._delete ? message(locale, "removed", { item: t(pageMeta[target].singular) }) : message(locale, "saved", { item: t(pageMeta[target].singular) })); };
   const currentStore = stores[page];
 
-  return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
+  const navAllowed = (id: string) => id === "dashboard" || id === "calendar" || access.can(id as ModuleId, "view");
+  return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><AccessContext.Provider value={access}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
     {mobileNav && <button className="mobile-overlay" aria-label={t("Tutup navigasi")} onClick={() => setMobileNav(false)} />}
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-      <div className="brand"><span className="brand-mark"><Home size={16} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")}><span className="collapse-icon-stack" aria-hidden="true"><span className={sidebarCollapsed ? "is-visible" : "is-hidden"}><PanelLeftOpen /></span><span className={sidebarCollapsed ? "is-hidden" : "is-visible"}><PanelLeftClose /></span></span></button></div>
-      <nav className="nav" aria-label={t("Navigasi utama")}><div className="nav-label">{t("Operasional")}</div>{nav.slice(0, 9).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}<div className="nav-label">Workspace</div>{nav.slice(9).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}</nav>
+      <div className="brand"><span className="brand-mark"><img src="/logo.svg" alt="Sewain" width={24} height={24} style={{borderRadius: 6}} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")}><span className="collapse-icon-stack" aria-hidden="true"><span className={sidebarCollapsed ? "is-visible" : "is-hidden"}><PanelLeftOpen /></span><span className={sidebarCollapsed ? "is-hidden" : "is-visible"}><PanelLeftClose /></span></span></button></div>
+      <nav className="nav" aria-label={t("Navigasi utama")}><div className="nav-label">{t("Operasional")}</div>{nav.slice(0, 10).filter(item => navAllowed(item.id)).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}<div className="nav-label">Workspace</div>{nav.slice(10).filter(item => navAllowed(item.id)).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}</nav>
       <div className="language-switcher"><span className="language-flag" aria-hidden="true">{locale === "id" ? "🇮🇩" : "🇬🇧"}</span><select id="locale" aria-label={t("Bahasa")} value={locale} onChange={event => setLocale(event.target.value as Locale)}><option value="id">Indonesia</option><option value="en">English</option></select></div>
-      <div className="profile" title={sidebarCollapsed ? "Andi Triono" : undefined}><span className="avatar">AT</span><div className="profile-copy"><strong>Andi Triono</strong><span>{t("Pemilik · PT Makmur")}</span></div></div>
+      <div className="profile" title={sidebarCollapsed ? access.currentMember?.name : undefined}><span className="avatar">{initials(access.currentMember?.name || "?")}</span><div className="profile-copy"><strong>{access.currentMember?.name || "—"}</strong><span>{access.currentRole ? t(access.currentRole.name) : t("Tanpa peran")} · PT Makmur</span></div></div>
     </aside>
-    <div className="shell"><header className="topbar"><button className="icon-button menu-button" aria-label={t("Buka navigasi")} onClick={() => setMobileNav(true)}><PanelLeftOpen /></button><div className="global-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Pencarian global")} placeholder={t("Cari properti, penyewa, atau tagihan...")} /><span className="kbd">⌘K</span></div><div className="top-actions"><button className="icon-button hide-mobile" aria-label={t("Jadwal")}><CalendarDays /></button><div className="notification-anchor" ref={notificationsRef}><button className={`icon-button notification-trigger ${notificationsOpen ? "active" : ""}`} aria-label={locale === "en" ? "Notifications" : "Notifikasi"} aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(current => !current)}><Bell />{notificationItems.some(item => !readNotifications.includes(item.id)) && <span className="notification-dot" aria-hidden="true" />}</button>{notificationsOpen && <section className="notification-popover" role="dialog" aria-label={locale === "en" ? "Notifications" : "Notifikasi"}><div className="notification-head"><div><h2>{locale === "en" ? "Notifications" : "Notifikasi"}</h2><p>{locale === "en" ? "Your latest operational updates" : "Pembaruan operasional terbaru"}</p></div><button className="notification-read-all" onClick={() => rememberRead(notificationItems.map(item => item.id))}>{locale === "en" ? "Mark all read" : "Tandai dibaca"}</button></div><div className="notification-list">{notificationItems.map(item => { const unread = !readNotifications.includes(item.id); const Icon = item.kind === "payment" ? CircleDollarSign : item.kind === "reminder" ? CalendarClock : item.kind === "maintenance" ? MessageSquareText : FileType2; return <button className={`notification-item ${unread ? "unread" : ""}`} key={item.id} onClick={() => openNotification(item)}><span className={`notification-icon ${item.kind}`}><Icon /></span><span className="notification-copy"><span className="notification-title">{locale === "en" ? ({ payment: "Payment received", reminder: "Invoice due today", maintenance: "New complaint from WhatsApp bot", contract: "Contract awaiting signature" } as const)[item.kind] : item.title}</span><span className="notification-description">{item.description}</span><time>{item.time}</time></span>{unread && <span className="unread-dot" aria-label={locale === "en" ? "Unread" : "Belum dibaca"} />}</button>; })}</div><button className="notification-footer" onClick={() => { setNotificationsOpen(false); go("dashboard"); }}>{locale === "en" ? "Open activity overview" : "Buka ringkasan aktivitas"}<ChevronLeft /></button></section>}</div></div></header>
+    <div className="shell"><header className="topbar"><button className="icon-button menu-button" aria-label={t("Buka navigasi")} onClick={() => setMobileNav(true)}><PanelLeftOpen /></button><div className="global-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Pencarian global")} placeholder={t("Cari properti, penyewa, atau tagihan...")} /><span className="kbd">⌘K</span></div><div className="top-actions"><button className={`icon-button hide-mobile ${page === "calendar" ? "active" : ""}`} aria-label={t("Jadwal")} onClick={() => go("calendar")}><CalendarDays /></button>{access.members.length > 1 && <div className="acting-as-anchor" ref={actingAsRef}><button className={`icon-button acting-as-trigger ${actingAsOpen ? "active" : ""}`} aria-label={t("Lihat sebagai")} aria-haspopup="dialog" aria-expanded={actingAsOpen} onClick={() => setActingAsOpen(o => !o)} title={t("Lihat sebagai") + ": " + (access.currentMember?.name || "")}><span className="acting-as-avatar">{initials(access.currentMember?.name || "?")}</span></button>{actingAsOpen && <div className="acting-as-popover" role="dialog" aria-label={t("Lihat sebagai")}><p className="acting-as-label">{t("Lihat sebagai")}</p>{access.members.map(member => { const role = access.roles.find(r => r.id === member.roleId); return <button key={member.id} className={`acting-as-option ${member.id === access.currentUserId ? "active" : ""}`} onClick={() => { access.setCurrentUserId(member.id); setActingAsOpen(false); }}><span className="acting-as-opt-avatar">{initials(member.name)}</span><span className="acting-as-opt-copy"><strong>{member.name}</strong><span>{role ? t(role.name) : ""}</span></span>{member.id === access.currentUserId && <Check size={14} />}</button>; })}</div>}</div>}<div className="notification-anchor" ref={notificationsRef}><button className={`icon-button notification-trigger ${notificationsOpen ? "active" : ""}`} aria-label={locale === "en" ? "Notifications" : "Notifikasi"} aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(current => !current)}><Bell />{notificationItems.some(item => !readNotifications.includes(item.id)) && <span className="notification-dot" aria-hidden="true" />}</button>{notificationsOpen && <section className="notification-popover" role="dialog" aria-label={locale === "en" ? "Notifications" : "Notifikasi"}><div className="notification-head"><div><h2>{locale === "en" ? "Notifications" : "Notifikasi"}</h2><p>{locale === "en" ? "Your latest operational updates" : "Pembaruan operasional terbaru"}</p></div><button className="notification-read-all" onClick={() => rememberRead(notificationItems.map(item => item.id))}>{locale === "en" ? "Mark all read" : "Tandai dibaca"}</button></div><div className="notification-list">{notificationItems.map(item => { const unread = !readNotifications.includes(item.id); const Icon = item.kind === "payment" ? CircleDollarSign : item.kind === "reminder" ? CalendarClock : item.kind === "maintenance" ? MessageSquareText : FileType2; return <button className={`notification-item ${unread ? "unread" : ""}`} key={item.id} onClick={() => openNotification(item)}><span className={`notification-icon ${item.kind}`}><Icon /></span><span className="notification-copy"><span className="notification-title">{locale === "en" ? ({ payment: "Payment received", reminder: "Invoice due today", maintenance: "New complaint from WhatsApp bot", contract: "Contract awaiting signature" } as const)[item.kind] : item.title}</span><span className="notification-description">{item.description}</span><time>{item.time}</time></span>{unread && <span className="unread-dot" aria-label={locale === "en" ? "Unread" : "Belum dibaca"} />}</button>; })}</div><button className="notification-footer" onClick={() => { setNotificationsOpen(false); go("dashboard"); }}>{locale === "en" ? "Open activity overview" : "Buka ringkasan aktivitas"}<ChevronLeft /></button></section>}</div></div></header>
       <main className="main" id="main-content">
         {page === "dashboard" && <Dashboard go={go} reservations={reservations} />}
-        {page === "properties" && <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} onBook={openBooking} openDialog={setDialog} notify={notify} />}
+        {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} />}
+        {page === "properties" && <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} />}
         {page === "tenants" && <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} />}
         {page === "invoices" && <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} />}
         {page === "tickets" && <MaintenancePage rows={tickets} setRows={setTickets} openDialog={setDialog} notify={notify} />}
@@ -2008,7 +2365,7 @@ function SewainContent() {
     {dialog && <EditDialog state={dialog} onClose={() => setDialog(null)} onSave={save} />}
     {booking && <BookingDialog ctx={booking} properties={propertyRows} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} setReservations={setReservations} onClose={() => setBooking(null)} onCreated={id => { setFocusReservationId(id); go("reservations"); }} notify={notify} />}
     {toast && <div className="toast" role="status"><CheckCircle2 />{toast}</div>}
-  </div></TokenConfigContext.Provider>;
+  </div></AccessContext.Provider></TokenConfigContext.Provider>;
 }
 
 export function SewainApp() {

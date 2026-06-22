@@ -1,7 +1,7 @@
 export type Locale = "id" | "en";
 
 const english: Record<string, string> = {
-  "Ringkasan": "Overview", "Properti": "Properties", "Penyewa": "Tenants", "Sewa & Deposit": "Leases & Deposits",
+  "Ringkasan": "Overview", "Kalender": "Calendar", "Properti": "Properties", "Penyewa": "Tenants", "Sewa & Deposit": "Leases & Deposits",
   "Tagihan": "Invoices", "Token PLN": "Electricity Tokens (PLN)", "Kontrak": "Contracts", "Template Pesan": "Message Templates",
   "Pemeliharaan": "Maintenance", "Dokumen": "Documents", "Pengaturan": "Settings", "Operasional": "Operations",
   "Hal yang perlu Anda tindak lanjuti hari ini.": "Items that need your attention today.",
@@ -77,7 +77,13 @@ const english: Record<string, string> = {
   "Tanggal 5": "The 5th of each month", "3 hari sebelum": "3 days before", "Setiap 3 hari": "Every 3 days",
   "Pesan dicatat tanpa dikirim ke nomor asli": "Messages are logged without being sent to real phone numbers",
   "Tautan pembayaran menggunakan data lokal": "Payment links use local test data", "Token PLN tidak diterbitkan secara nyata": "No real PLN electricity token is issued",
-  "Tes": "Test", "Pemilik": "Owner", "Admin": "Admin", "Simpan": "Save", "Lewati navigasi": "Skip navigation",
+  "Tes": "Test", "Pemilik": "Owner", "Admin": "Admin", "Staf": "Staff", "Simpan": "Save", "Lewati navigasi": "Skip navigation",
+  "Peran": "Roles", "Modul": "Module", "Lihat": "View", "Ubah": "Edit", "Diundang": "Invited", "Hak akses": "Permissions",
+  "Tanpa peran": "No role", "Hanya lihat": "View only", "Anggota": "Members", "Undang anggota": "Invite member",
+  "Buat peran": "Create role", "Hapus peran": "Delete role", "Lihat sebagai": "Acting as", "Sistem": "System", "Peran baru": "New role",
+  "Akses penuh ke seluruh modul dan pengaturan.": "Full access to all modules and settings.",
+  "Mengelola operasional harian; pengaturan terbatas.": "Manages day-to-day operations; limited settings access.",
+  "Menjalankan tugas operasional tanpa akses pengaturan.": "Handles operational tasks without settings access.",
   "Navigasi utama": "Primary navigation", "Pencarian global": "Global search", "Cari properti, penyewa, atau tagihan...": "Search properties, tenants, or invoices...",
   "Jadwal": "Schedule", "Notifikasi": "Notifications", "Buka navigasi": "Open navigation", "Tutup navigasi": "Close navigation",
   "Bahasa": "Language", "Indonesia": "Indonesian", "Inggris": "English", "Pemilik · PT Makmur": "Owner · PT Makmur",

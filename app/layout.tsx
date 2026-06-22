@@ -4,6 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Sewain | Operasional Properti",
   description: "Kelola properti, penyewa, kontrak, tagihan, dan pemeliharaan dalam satu tempat.",
+  icons: {
+    icon: "/logo.svg",
+    apple: "/logo.svg",
+  },
 };
 
 export const viewport: Viewport = {
