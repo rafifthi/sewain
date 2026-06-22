@@ -2,9 +2,9 @@
 
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, CircleDollarSign,
+  Bell, Bot, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, CircleDollarSign,
   ClipboardList, CreditCard, FileText, FileType2, Gauge, Home, MessageSquareText,
-  Bold, CalendarClock, CalendarPlus, Download, Eye, GripVertical, IdCard, ImagePlus, Italic, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Search, Settings, ShieldCheck, Tag, TicketCheck, Trash2,
+  Bold, CalendarClock, CalendarPlus, Download, Eye, GripVertical, IdCard, ImagePlus, Italic, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Search, Send, Settings, ShieldCheck, Tag, TicketCheck, Trash2,
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
 } from "lucide-react";
 import { invoices as seedInvoices, moduleData, properties as seedProperties, Row, units as seedUnits } from "@/lib/data";
@@ -27,6 +27,8 @@ type NotificationItem = {
   description: string;
   time: string;
 };
+type IntegrationConfig = { botUrl: string; apiKey: string };
+const defaultIntegrationConfig: IntegrationConfig = { botUrl: "https://property-manager-bot.vercel.app", apiKey: "sewain-dev-key" };
 
 type I18nState = { locale: Locale; setLocale: (locale: Locale) => void; t: (value: string) => string; v: (value: unknown) => string };
 const I18nContext = createContext<I18nState>({ locale: "id", setLocale: () => {}, t: value => value, v: value => String(value ?? "") });
@@ -102,7 +104,7 @@ const schemas: Partial<Record<PageId, FormFieldSchema[]>> = {
   ],
   messages: [
     { key: "peristiwa", label: "Peristiwa" }, { key: "waktu", label: "Waktu kirim" },
-    { key: "saluran", label: "Saluran", options: ["WhatsApp"] }, { key: "status", label: "Status", options: ["Aktif", "Nonaktif"] },
+    { key: "saluran", label: "Saluran", options: ["WhatsApp", "Telegram"] }, { key: "status", label: "Status", options: ["Aktif", "Nonaktif"] },
   ],
   tickets: [
     { key: "tiket", label: "Nomor tiket" }, { key: "masalah", label: "Masalah", multiline: true },
@@ -118,7 +120,7 @@ const schemas: Partial<Record<PageId, FormFieldSchema[]>> = {
 
 const columnLabels: Record<string, string> = {
   nama: "Nama", tipe: "Tipe", lokasi: "Lokasi", unit: "Unit", terisi: "Terisi", pendapatan: "Pendapatan",
-  telepon: "WhatsApp", sejak: "Mulai", status: "Status", penyewa: "Penyewa", properti: "Properti", periode: "Periode",
+  telepon: "WhatsApp", telegram_id: "Telegram", sejak: "Mulai", status: "Status", penyewa: "Penyewa", properti: "Properti", periode: "Periode",
   deposit: "Deposit", tahap: "Tahap", pelanggan: "Pelanggan", meter: "Nomor meter", nominal: "Nominal", biaya: "Biaya",
   kode: "Kode", durasi: "Durasi", sewa: "Sewa", jadwalMasuk: "Jadwal masuk", jadwalKeluar: "Jadwal keluar",
   nomor: "Nomor", dibuat: "Dibuat", peristiwa: "Peristiwa", waktu: "Waktu", saluran: "Saluran", tiket: "Tiket",
@@ -333,6 +335,17 @@ function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, g
   const outstanding = payments.reduce((total, payment) => total + rupiahValue(payment.sisa), 0);
   const paid = payments.reduce((total, payment) => total + Math.max(0, rupiahValue(payment.total) - rupiahValue(payment.sisa)), 0);
   const formatRupiah = (amount: number) => v(`Rp${amount.toLocaleString("id-ID")}`);
+  const sendTelegram = async () => {
+    const text = window.prompt(locale === "en" ? "Message text" : "Teks pesan");
+    if (!text) return;
+    try {
+      const response = await fetch("https://property-manager-bot.vercel.app/api/send", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": "sewain-dev-key" }, body: JSON.stringify({ chat_id: Number(tenant.telegram_id), text }) });
+      if (!response.ok) throw new Error("Telegram send failed");
+      window.alert(locale === "en" ? "Telegram message sent." : "Pesan Telegram terkirim.");
+    } catch {
+      window.alert(locale === "en" ? "Failed to send Telegram message." : "Gagal mengirim pesan Telegram.");
+    }
+  };
   return <>
     <button className="button tenant-back" onClick={onBack}><ChevronLeft />{t("Semua penyewa")}</button>
     <section className="panel tenant-summary-card"><div className="tenant-summary-main"><div className="tenant-heading"><span className="avatar tenant-avatar">{String(tenant.nama).split(" ").map(part => part[0]).slice(0, 2).join("")}</span><div><div className="property-title"><h1>{v(tenant.nama)}</h1><Status>{tenant.status || "Belum ada sewa"}</Status></div><p className="subtext">{tenant.sejak ? `${t("Penyewa sejak")} ${v(tenant.sejak)}` : t("Belum ada sewa aktif")}</p></div></div><div className="actions"><a className="button primary whatsapp-cta" href={whatsappUrl(tenant.telepon)} target="_blank" rel="noreferrer"><MessageSquareText />WhatsApp</a><button className="button" onClick={onEdit}><Pencil />{t("Edit")}</button><button className="icon-button" aria-label={t("Opsi lainnya")}><MoreHorizontal /></button></div></div>
@@ -344,7 +357,7 @@ function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, g
       </section>
       <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Riwayat pembayaran")}</h2><p>{payments.length} {t("tagihan ditemukan")}</p></div></div>{payments.length ? <div className="payment-list">{payments.map(payment => <div className="payment-row" key={payment.id}><span><strong>{payment.id}</strong><small>{v(payment.periode)} · {v(payment.unit)}</small></span><span><strong>{v(payment.total)}</strong><small>{t("Sisa")}: {v(payment.sisa)}</small></span><Status>{payment.status}</Status></div>)}</div> : <div className="inline-empty">{t("Belum ada riwayat pembayaran.")}</div>}</section>
     </main><aside className="tenant-side-column">
-      <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Kontak & identitas")}</h2></div></div><div className="contact-list contact-identity-list"><div><MessageSquareText /><span><small>WhatsApp</small><a href={whatsappUrl(tenant.telepon)} target="_blank" rel="noreferrer">{v(tenant.telepon)}</a></span></div><div><Mail /><span><small>Email</small><a href={`mailto:${tenant.email}`}>{v(tenant.email)}</a></span></div><div><IdCard /><span><small>{t("Nomor KTP / identitas")}</small><strong>{v(tenant.nomorIdentitas)}</strong></span></div><div><ShieldCheck /><span><small>{t("Kontak darurat")}</small><strong>{v(tenant.kontakDarurat)}</strong><em>{v(tenant.teleponDarurat)}</em></span></div></div></section>
+      <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Kontak & identitas")}</h2></div></div><div className="contact-list contact-identity-list"><div><MessageSquareText /><span><small>WhatsApp</small><a href={whatsappUrl(tenant.telepon)} target="_blank" rel="noreferrer">{v(tenant.telepon)}</a></span></div>{tenant.telegram_id && <div><Send /><span><small>Telegram</small><button className="text-button" onClick={sendTelegram}>Kirim pesan</button></span></div>}<div><Mail /><span><small>Email</small><a href={`mailto:${tenant.email}`}>{v(tenant.email)}</a></span></div><div><IdCard /><span><small>{t("Nomor KTP / identitas")}</small><strong>{v(tenant.nomorIdentitas)}</strong></span></div><div><ShieldCheck /><span><small>{t("Kontak darurat")}</small><strong>{v(tenant.kontakDarurat)}</strong><em>{v(tenant.teleponDarurat)}</em></span></div></div></section>
       <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Dokumen")}</h2><p>{t("Kontrak dan dokumen identitas")}</p></div></div><div className="identity-document"><img src={String(tenant.gambarIdentitas || "/ktp-placeholder.svg")} alt={`${t("Kartu identitas")} ${tenant.nama}`} /><span><strong>{t("Kartu identitas")}</strong><small>{t("Privat")}</small></span></div><div className="document-list compact-document-list">{documents.map(document => <div className="document-row" key={document.id}><span className="document-type"><FileText /></span><span><strong>{v(document.nama)}</strong><small>{t(String(document.kategori))} · {v(document.diperbarui)}</small></span></div>)}</div></section>
       <button className="button danger tenant-delete" onClick={() => window.confirm(locale === "en" ? "Delete this tenant record?" : "Hapus data penyewa ini?") && onDelete()}><Trash2 />{t("Hapus penyewa")}</button>
     </aside></div>
@@ -1102,7 +1115,7 @@ function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRo
       </aside></div></>;
 }
 
-function SettingsPage({ notify }: { notify: (s: string) => void }) {
+function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { notify: (s: string) => void; integrationConfig: IntegrationConfig; setIntegrationConfig: (config: IntegrationConfig) => void }) {
   const { locale, t, v } = useI18n();
   const { config: tokenConfig, setConfig: setTokenConfig } = useTokenConfig();
   const [tab, setTab] = useState("Organisasi");
@@ -1111,6 +1124,15 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
     const n = Number(nominalInput);
     if (n > 0 && !tokenConfig.nominals.includes(n)) setTokenConfig({ ...tokenConfig, nominals: [...tokenConfig.nominals, n] });
     setNominalInput("");
+  };
+  const testTelegram = async () => {
+    try {
+      const response = await fetch(`${integrationConfig.botUrl}/api/health`);
+      if (!response.ok) throw new Error("Telegram bot health check failed");
+      notify(locale === "en" ? "Telegram bot connected." : "Telegram bot terhubung.");
+    } catch {
+      notify(locale === "en" ? "Telegram bot connection failed." : "Koneksi Telegram bot gagal.");
+    }
   };
   return <><PageHead page="settings" /><section className="panel"><div className="tabs">{["Organisasi", "Penagihan", "Token PLN", "Integrasi", "Pengguna"].map(item => <button key={item} onClick={() => setTab(item)} className={`tab ${tab === item ? "active" : ""}`}>{t(item)}</button>)}</div><div className="dialog-body" style={{ maxWidth: 720 }}>
     {tab === "Organisasi" && <div className="form-grid"><Field label="Nama organisasi" value="PT Makmur Sejahtera" autoComplete="organization" /><Field label="Zona waktu" value="Asia/Jakarta" options={["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"]} /><Field full multiline label="Alamat" value="Jl. Melati No. 45, Depok, Jawa Barat" autoComplete="street-address" /></div>}
@@ -1130,7 +1152,7 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
         <p className="subtext">{locale === "en" ? "Manage the global platform fee from the Token PLN page using the \"Manage fee\" button." : "Kelola biaya platform global dari halaman Token PLN menggunakan tombol \"Kelola biaya\"."}</p>
       </div>
     </div>}
-    {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>{locale === "en" ? "PPOB (utility payments)" : "PPOB"} · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Token PLN tidak diterbitkan secara nyata")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "PPOB test succeeded." : "Tes PPOB berhasil.")}>{t("Tes")}</button></div></div>}
+    {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><Bot /></span><span><strong>Telegram Bot @theDaedalus_bot</strong><span className="cell-sub">Kirim notifikasi ke penyewa via Telegram</span></span><span className={`badge ${integrationConfig.apiKey ? "success" : ""}`}>{integrationConfig.apiKey ? "Terhubung" : "Belum terkonfigurasi"}</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="telegram-bot-url">Bot API URL</label><input id="telegram-bot-url" type="text" value={integrationConfig.botUrl} onChange={event => setIntegrationConfig({ ...integrationConfig, botUrl: event.target.value })} /></div><div className="form-field full"><label htmlFor="telegram-api-key">API Key</label><input id="telegram-api-key" type="password" value={integrationConfig.apiKey} onChange={event => setIntegrationConfig({ ...integrationConfig, apiKey: event.target.value })} /></div></div><div className="actions" style={{ marginTop: 12, marginBottom: 16 }}><button type="button" className="button" onClick={testTelegram}>Uji Koneksi</button></div><hr /><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>{locale === "en" ? "PPOB (utility payments)" : "PPOB"} · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Token PLN tidak diterbitkan secara nyata")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "PPOB test succeeded." : "Tes PPOB berhasil.")}>{t("Tes")}</button></div></div>}
     {tab === "Pengguna" && <div><div className="activity"><span className="avatar">AT</span><span><strong>Andi Triono</strong><span className="cell-sub">andi@sewain.id · {t("Pemilik")}</span></span><Status>Aktif</Status></div><div className="activity"><span className="avatar">RN</span><span><strong>Rina Novita</strong><span className="cell-sub">rina@sewain.id · {t("Admin")}</span></span><Status>Aktif</Status></div></div>}
     <div className="actions" style={{ marginTop: 20 }}><button className="button primary" onClick={() => notify(message(locale, "settings", { section: t(tab) }))}>{t("Simpan perubahan")}</button></div>
   </div></section></>;
@@ -1255,7 +1277,7 @@ function TenantDialog({ state, onClose, onSave }: { state: Exclude<DialogState, 
   const { locale, t } = useI18n();
   const row = state.row;
   const [values, setValues] = useState({
-    nama: String(row?.nama || ""), telepon: String(row?.telepon || ""), email: String(row?.email || ""),
+    nama: String(row?.nama || ""), telepon: String(row?.telepon || ""), email: String(row?.email || ""), telegram_id: String(row?.telegram_id || ""),
     nomorIdentitas: String(row?.nomorIdentitas || ""), gambarIdentitas: String(row?.gambarIdentitas || ""),
     kontakDarurat: String(row?.kontakDarurat || ""), teleponDarurat: String(row?.teleponDarurat || ""),
   });
@@ -1277,7 +1299,7 @@ function TenantDialog({ state, onClose, onSave }: { state: Exclude<DialogState, 
   return <div className="backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}><form className="dialog tenant-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="tenant-form-title">
     <div className="dialog-head"><div><h2 id="tenant-form-title">{t(state.mode === "create" ? "Tambah penyewa" : "Edit penyewa")}</h2><p>{t("Simpan kontak dan identitas penyewa tanpa menetapkan properti.")}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div>
     <div className="dialog-body tenant-form"><div className="booking-notice"><Home /><span><strong>{t("Penempatan unit dilakukan lewat booking")}</strong><small>{t("Buka detail properti dan pilih Buat pemesanan untuk menetapkan penyewa ke unit.")}</small></span></div>
-      <section className="form-section"><div className="form-section-head"><strong>{t("Detail kontak")}</strong><span>1</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="tenant-name">{t("Nama lengkap")}</label><input id="tenant-name" autoComplete="name" value={values.nama} onChange={event => update("nama", event.target.value)} required /></div><div className="form-field"><label htmlFor="tenant-whatsapp">{t("Nomor WhatsApp")}</label><input id="tenant-whatsapp" type="tel" inputMode="tel" autoComplete="tel" pattern="[0-9+()\s-]{8,20}" placeholder="08xx xxxx xxxx" value={values.telepon} onChange={event => update("telepon", event.target.value)} required /></div><div className="form-field"><label htmlFor="tenant-email">Email</label><input id="tenant-email" type="email" inputMode="email" autoComplete="email" value={values.email} onChange={event => update("email", event.target.value)} required /></div></div></section>
+      <section className="form-section"><div className="form-section-head"><strong>{t("Detail kontak")}</strong><span>1</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="tenant-name">{t("Nama lengkap")}</label><input id="tenant-name" autoComplete="name" value={values.nama} onChange={event => update("nama", event.target.value)} required /></div><div className="form-field"><label htmlFor="tenant-whatsapp">{t("Nomor WhatsApp")}</label><input id="tenant-whatsapp" type="tel" inputMode="tel" autoComplete="tel" pattern="[0-9+()\s-]{8,20}" placeholder="08xx xxxx xxxx" value={values.telepon} onChange={event => update("telepon", event.target.value)} required /></div><div className="form-field"><label htmlFor="tenant-email">Email</label><input id="tenant-email" type="email" inputMode="email" autoComplete="email" value={values.email} onChange={event => update("email", event.target.value)} required /></div><div className="form-field"><label htmlFor="tenant-telegram">Telegram ID</label><input id="tenant-telegram" type="text" inputMode="numeric" placeholder="Chat ID (angka)" value={values.telegram_id} onChange={event => update("telegram_id", event.target.value)} /></div></div></section>
       <section className="form-section"><div className="form-section-head"><strong>{t("Kartu identitas")}</strong><span>2</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="tenant-id-number">{t("Nomor KTP / identitas")}</label><input id="tenant-id-number" type="text" inputMode="numeric" autoComplete="off" pattern="[0-9]{12,20}" minLength={12} maxLength={20} value={values.nomorIdentitas} onChange={event => update("nomorIdentitas", event.target.value)} required /></div><div className="form-field full"><label className={`image-upload identity-upload ${values.gambarIdentitas ? "has-image" : ""}`} htmlFor="tenant-id-image">{values.gambarIdentitas ? <img src={values.gambarIdentitas} alt={t("Pratinjau kartu identitas")} /> : <ImagePlus />}<span><strong>{imageName || t(values.gambarIdentitas ? "Ganti gambar kartu identitas" : "Unggah gambar kartu identitas")}</strong><small>{t("JPG, PNG, atau WebP. Maksimal 1 MB.")}</small></span><input id="tenant-id-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => handleImage(event.target.files?.[0])} /></label></div></div></section>
       <section className="form-section"><div className="form-section-head"><strong>{t("Kontak darurat")}</strong><span>3</span></div><div className="form-grid"><div className="form-field"><label htmlFor="emergency-name">{t("Nama kontak darurat")}</label><input id="emergency-name" autoComplete="name" value={values.kontakDarurat} onChange={event => update("kontakDarurat", event.target.value)} required /></div><div className="form-field"><label htmlFor="emergency-phone">{t("Nomor kontak darurat")}</label><input id="emergency-phone" type="tel" inputMode="tel" autoComplete="tel" pattern="[0-9+()\s-]{8,20}" value={values.teleponDarurat} onChange={event => update("teleponDarurat", event.target.value)} required /></div></div></section>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -1914,6 +1936,7 @@ function SewainContent() {
   const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
   const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
   const [templates, setTemplates] = useStoredConfig<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
+  const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
   const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
   const [documents, setDocuments] = useStoredRows("documents", moduleData.documents);
   const [units, setUnits] = useStoredRows("units", seedUnits);
@@ -1976,7 +1999,7 @@ function SewainContent() {
         {page === "invoices" && <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} />}
         {page === "tickets" && <MaintenancePage rows={tickets} setRows={setTickets} openDialog={setDialog} notify={notify} />}
         {page === "tokens" && <TokenPage rows={tokens} setRows={setTokens} openDialog={setDialog} notify={notify} />}
-        {page === "settings" && <SettingsPage notify={notify} />}
+        {page === "settings" && <SettingsPage notify={notify} integrationConfig={integrationConfig} setIntegrationConfig={setIntegrationConfig} />}
         {page === "messages" && <MessageTemplatesPage templates={templates} setTemplates={setTemplates} notify={notify} />}
         {page === "reservations" && <ReservationsPage rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} properties={propertyRows} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} />}
         {currentStore && !["properties", "tenants", "invoices", "tickets", "tokens", "messages", "reservations"].includes(page) && <CrudPage page={page} rows={currentStore[0]} setRows={currentStore[1]} openDialog={setDialog} notify={notify} />}
