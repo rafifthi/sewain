@@ -11,6 +11,7 @@ import { message, translate, type Locale } from "@/lib/i18n";
 import { formatRp } from "@/lib/utility-token-config";
 import { useI18n, useAccess } from "@/components/context";
 import { type ModuleId } from "@/lib/access-control";
+import { SkeletonTable } from "@/components/skeleton";
 
 export type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 
@@ -174,12 +175,13 @@ export function Toolbar({ search, setSearch, page }: { search: string; setSearch
   </div>;
 }
 
-export function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId }) {
+export function DataTable({ rows, onEdit, onDelete, onSelect, selected, module, loading = false }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId; loading?: boolean }) {
   const { t, v } = useI18n();
   const { can } = useAccess();
   const canEdit = !module || can(module, "edit");
   const canDelete = !module || can(module, "delete");
   const keys = rows.length ? Object.keys(rows[0]).filter(k => k !== "id" && !k.startsWith("_")).slice(0, 6) : [];
+  if (loading) return <SkeletonTable cols={Math.max(keys.length + 1, 5)} />;
   return <div className="table-wrap"><table>
     <thead><tr>{keys.map(key => <th key={key}>{t(columnLabels[key] || key)}</th>)}<th>{t("Aksi")}</th></tr></thead>
     <tbody>{rows.map(row => <tr key={row.id} onClick={() => onSelect?.(row)} className={selected === row.id ? "selected" : ""}>
@@ -189,14 +191,14 @@ export function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }
   </table></div>;
 }
 
-export function CrudPage({ page, rows, setRows, openDialog, notify }: { page: PageId; rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+export function CrudPage({ page, rows, setRows, openDialog, notify, loading = false }: { page: PageId; rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
   const [search, setSearch] = useState("");
   const filtered = rows.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(search.toLowerCase())));
   const remove = (row: Row) => { setRows(old => old.filter(item => item.id !== row.id)); notify(message(locale, "removed", { item: t(pageMeta[page].singular) })); };
   return <><PageHead page={page} action={() => openDialog({ mode: "create", page })} />
     <section className="panel"><Toolbar search={search} setSearch={setSearch} page={page} />
-      {filtered.length ? <DataTable rows={filtered} module={page as ModuleId} onEdit={row => openDialog({ mode: "edit", page, row })} onDelete={remove} /> : <div className="empty"><ClipboardList /><div><strong>{t("Belum ada data yang cocok")}</strong>{locale === "en" ? `Change your search or add a new ${t(pageMeta[page].singular)}.` : `Ubah pencarian atau tambahkan ${pageMeta[page].singular} baru.`}</div></div>}
+      {loading ? <SkeletonTable /> : filtered.length ? <DataTable rows={filtered} module={page as ModuleId} onEdit={row => openDialog({ mode: "edit", page, row })} onDelete={remove} /> : <div className="empty"><ClipboardList /><div><strong>{t("Belum ada data yang cocok")}</strong>{locale === "en" ? `Change your search or add a new ${t(pageMeta[page].singular)}.` : `Ubah pencarian atau tambahkan ${pageMeta[page].singular} baru.`}</div></div>}
     </section></>;
 }
 

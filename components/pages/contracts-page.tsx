@@ -25,9 +25,10 @@ type ContractsPageProps = {
   reservations: Row[]; setReservations: React.Dispatch<React.SetStateAction<Row[]>>;
   tenants: Row[]; notify: (s: string) => void;
   focusId: string; onClearFocus: () => void;
+  loading?: boolean;
 };
 
-export function ContractsPage({ contracts, setContracts, templates, setTemplates, reservations, setReservations, tenants, notify, focusId, onClearFocus }: ContractsPageProps) {
+export function ContractsPage({ contracts, setContracts, templates, setTemplates, reservations, setReservations, tenants, notify, focusId, onClearFocus, loading = false }: ContractsPageProps) {
   const { locale, t, v } = useI18n();
   const { can } = useAccess();
   const L = (id: string, en: string) => (locale === "en" ? en : id);
@@ -62,7 +63,7 @@ export function ContractsPage({ contracts, setContracts, templates, setTemplates
       </div>
     </div>
     <section className="panel"><Toolbar search={search} setSearch={setSearch} />
-      {filtered.length ? <DataTable rows={filtered} module="contracts" onEdit={row => setSelectedId(String(row.id))} onDelete={remove} onSelect={row => setSelectedId(String(row.id))} selected={selectedId} /> : <div className="empty"><FileText /><div><strong>{L("Belum ada kontrak", "No contracts yet")}</strong>{L("Buat kontrak baru atau tandatangani draf dari reservasi.", "Create a new contract or sign a draft from a reservation.")}</div></div>}
+      {loading ? <DataTable rows={filtered} module="contracts" loading onEdit={row => setSelectedId(String(row.id))} onDelete={remove} onSelect={row => setSelectedId(String(row.id))} selected={selectedId} /> : filtered.length ? <DataTable rows={filtered} module="contracts" onEdit={row => setSelectedId(String(row.id))} onDelete={remove} onSelect={row => setSelectedId(String(row.id))} selected={selectedId} /> : <div className="empty"><FileText /><div><strong>{L("Belum ada kontrak", "No contracts yet")}</strong>{L("Buat kontrak baru atau tandatangani draf dari reservasi.", "Create a new contract or sign a draft from reservation.")}</div></div>}
     </section>
   </>;
 }

@@ -6,6 +6,7 @@ import { Row } from "@/lib/data";
 import { useI18n, useTokenConfig } from "@/components/context";
 import { formatRp, defaultTokenConfig, calcFee, type TokenConfig } from "@/lib/utility-token-config";
 import { PageHead, Toolbar, DataTable, CrudPage, type PageId } from "./shared";
+import { SkeletonTable } from "@/components/skeleton";
 
 const tokenActionMap: Record<string, { label: string; labelEn: string; next: string }> = {
   "Dikonfirmasi": { label: "Proses Pesanan", labelEn: "Process Order", next: "Diproses" },
@@ -70,7 +71,7 @@ function FeeConfigDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function TokenPage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: PageId; row?: Row }) => void; notify: (s: string) => void }) {
+export function TokenPage({ rows, setRows, openDialog, notify, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: PageId; row?: Row }) => void; notify: (s: string) => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(rows[0] ?? null);
   const [search, setSearch] = useState("");
@@ -110,7 +111,7 @@ export function TokenPage({ rows, setRows, openDialog, notify }: { rows: Row[]; 
       <div className="split">
         <section className="panel">
           <Toolbar search={search} setSearch={setSearch} />
-          <DataTable rows={filtered} selected={selected?.id} onSelect={setSelected} onEdit={row => openDialog({ mode: "edit", page: "tokens", row })} onDelete={remove} />
+          {loading ? <SkeletonTable /> : <DataTable rows={filtered} selected={selected?.id} onSelect={setSelected} onEdit={row => openDialog({ mode: "edit", page: "tokens", row })} onDelete={remove} />}
         </section>
         {selected ? (
           <aside className="detail-pane">

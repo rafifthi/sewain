@@ -16,6 +16,7 @@ import {
   unitLabelFor, unitsForProperty, isVacant, unitRent, unitDeposit, idMonthsLong, daysUntil,
   BookingState,
 } from "@/components/sewain-app";
+import { SkeletonStats, SkeletonTable } from "@/components/skeleton";
 
 type ReservationsPageProps = {
   rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>;
@@ -28,6 +29,7 @@ type ReservationsPageProps = {
   notify: (s: string) => void; focusId: string; onClearFocus: () => void;
   onBook: (ctx: BookingState) => void;
   onOpenContract: (nomor: string) => void;
+  loading?: boolean;
 };
 
 export function ReservationsPage(props: ReservationsPageProps) {
@@ -42,14 +44,14 @@ export function ReservationsPage(props: ReservationsPageProps) {
   const expiring = props.rows.filter(r => isExpiringSoon(r)).length;
   const filtered = props.rows.filter(r => Object.values(r).some(val => v(val).toLowerCase().includes(search.toLowerCase())));
   return <><div className="page-head"><div><h1>{t("Reservasi")}</h1><p className="subtext">{t("Lacak status setiap pemesanan dari booking hingga selesai.")}</p></div><div className="actions"><button className="button primary" onClick={() => props.onBook({})}><Plus />{locale === "en" ? "New Reservation" : "Buat Reservasi"}</button></div></div>
-    <div className="stats-strip">
+    {props.loading ? <SkeletonStats /> : <div className="stats-strip">
       <div className="stat"><span>{t("Booking")}</span><strong>{count("Booking")}</strong></div>
       <div className="stat"><span>{t("Aktif")}</span><strong>{count("Aktif")}</strong></div>
       <div className="stat"><span>{t("Akan berakhir")}</span><strong>{expiring}</strong><small style={{ color: expiring ? "var(--danger)" : undefined }}>{t("≤ 30 hari")}</small></div>
       <div className="stat"><span>{t("Tidak Aktif")}</span><strong>{count("Tidak Aktif")}</strong></div>
-    </div>
+    </div>}
     <section className="panel"><Toolbar search={search} setSearch={setSearch} />
-      {filtered.length ? <div className="table-wrap"><table>
+      {props.loading ? <SkeletonTable cols={6} /> : filtered.length ? <div className="table-wrap"><table>
         <thead><tr><th>{t("Kode")}</th><th>{t("Penyewa")}</th><th>{t("Unit")}</th><th>{t("Periode")}</th><th>{t("Status")}</th><th>{t("Aksi")}</th></tr></thead>
         <tbody>{filtered.map(r => <tr key={r.id} onClick={() => setSelectedId(r.id)} className={selectedId === r.id ? "selected" : ""}>
           <td><span className="cell-main">{v(r.kode)}</span></td>

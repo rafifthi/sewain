@@ -23,6 +23,7 @@ import {
   DEFAULT_CONTRACT_TEMPLATE_ID, findContractTemplate, SEED_CONTRACT_TEMPLATES,
 } from "@/lib/contracts";
 import { Sidebar, Topbar } from "@/components/layout";
+import { SkeletonTable } from "@/components/skeleton";
 import { CalendarPage } from "@/components/pages/calendar-page";
 import { InvoicePage } from "@/components/pages/invoices-page";
 import { TokenPage } from "@/components/pages/tokens-page";
@@ -138,11 +139,12 @@ const columnLabels: Record<string, string> = {
   jatuhTempo: "Jatuh tempo", total: "Total", sisa: "Sisa",
 };
 
-function useStoredRows(key: string, initial: Row[]) {
+function useStoredRows(key: string, initial: Row[]): [Row[], React.Dispatch<React.SetStateAction<Row[]>>, boolean] {
   const [rows, setRows] = useState<Row[]>(initial);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     const saved = localStorage.getItem(`sewain:${key}`);
-    if (!saved) return;
+    if (!saved) { setLoading(false); return; }
     const parsed = JSON.parse(saved) as Row[];
     if (key === "tenants" && localStorage.getItem("sewain:tenant-samples-v2") !== "true") {
       const unassignedSample = initial.find(row => row.id === "t4");
@@ -158,9 +160,10 @@ function useStoredRows(key: string, initial: Row[]) {
       localStorage.setItem(`sewain:${key}`, JSON.stringify(parsed));
     }
     setRows(parsed);
+    setLoading(false);
   }, [initial, key]);
   useEffect(() => { localStorage.setItem(`sewain:${key}`, JSON.stringify(rows)); }, [key, rows]);
-  return [rows, setRows] as const;
+  return [rows, setRows, loading];
 }
 
 function useStoredConfig<T>(key: string, initial: T): [T, (v: T) => void] {
@@ -304,12 +307,13 @@ export function Toolbar({ search, setSearch, page }: { search: string; setSearch
   </div>;
 }
 
-export function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId }) {
+export function DataTable({ rows, onEdit, onDelete, onSelect, selected, module, loading = false }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId; loading?: boolean }) {
   const { t, v } = useI18n();
   const { can } = useAccess();
   const canEdit = !module || can(module, "edit");
   const canDelete = !module || can(module, "delete");
   const keys = rows.length ? Object.keys(rows[0]).filter(k => k !== "id" && !k.startsWith("_")).slice(0, 6) : [];
+  if (loading) return <SkeletonTable cols={Math.max(keys.length + 1, 5)} />;
   return <div className="table-wrap"><table>
     <thead><tr>{keys.map(key => <th key={key}>{t(columnLabels[key] || key)}</th>)}<th>{t("Aksi")}</th></tr></thead>
     <tbody>{rows.map(row => <tr key={row.id} onClick={() => onSelect?.(row)} className={selected === row.id ? "selected" : ""}>
