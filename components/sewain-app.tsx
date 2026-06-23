@@ -24,6 +24,13 @@ import {
 } from "@/lib/contracts";
 
 type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
+
+const pageFilterOptions: Record<string, string[]> = {
+  documents: ["Semua", "Privat", "Terverifikasi"],
+  contracts: ["Semua", "Draf", "Menunggu tanda tangan", "Ditandatangani"],
+  tickets: ["Semua", "Baru", "Ditugaskan", "Dikerjakan", "Selesai"],
+  invoices: ["Semua", "Belum dibayar", "Jatuh tempo", "Terlambat", "Lunas"],
+};
 type DialogState = null | { mode: "create" | "edit"; page: PageId; row?: Row };
 type BookingState = { propertyId?: string; unitId?: string };
 type NotificationItem = {
@@ -36,27 +43,12 @@ type NotificationItem = {
   time: string;
 };
 type IntegrationConfig = { botUrl: string; apiKey: string };
-const defaultIntegrationConfig: IntegrationConfig = { botUrl: "https://property-manager-bot.vercel.app", apiKey: "sewain-dev-key" };
-
-type I18nState = { locale: Locale; setLocale: (locale: Locale) => void; t: (value: string) => string; v: (value: unknown) => string };
-const I18nContext = createContext<I18nState>({ locale: "id", setLocale: () => {}, t: value => value, v: value => String(value ?? "") });
-const useI18n = () => useContext(I18nContext);
-
-type TokenCtx = { config: TokenConfig; setConfig: (c: TokenConfig) => void; properties: Row[] };
-const TokenConfigContext = createContext<TokenCtx>({ config: defaultTokenConfig, setConfig: () => {}, properties: [] });
-const useTokenConfig = () => useContext(TokenConfigContext);
-
-type AccessCtx = {
-  roles: Role[]; members: Member[]; currentUserId: string;
-  currentMember: Member | undefined; currentRole: Role | undefined;
-  setRoles: (roles: Role[]) => void; setMembers: (members: Member[]) => void; setCurrentUserId: (id: string) => void;
-  can: (module: ModuleId, action: PermissionAction) => boolean;
+const defaultIntegrationConfig: IntegrationConfig = {
+  botUrl: process.env.NEXT_PUBLIC_BOT_URL || "https://property-manager-bot.vercel.app",
+  apiKey: process.env.NEXT_PUBLIC_BOT_API_KEY || "sewain-dev-key",
 };
-const AccessContext = createContext<AccessCtx>({
-  roles: [], members: [], currentUserId: "", currentMember: undefined, currentRole: undefined,
-  setRoles: () => {}, setMembers: () => {}, setCurrentUserId: () => {}, can: () => true,
-});
-const useAccess = () => useContext(AccessContext);
+
+import { I18nContext, useI18n, TokenConfigContext, useTokenConfig, AccessContext, useAccess, type I18nState, type AccessCtx } from "@/components/context";
 
 const nav = [
   { id: "dashboard", label: "Ringkasan", icon: Gauge },
@@ -303,11 +295,14 @@ function PageHead({ page, action, back }: { page: PageId; action?: () => void; b
   </div>;
 }
 
-function Toolbar({ search, setSearch }: { search: string; setSearch: (v: string) => void }) {
+function Toolbar({ search, setSearch, page }: { search: string; setSearch: (v: string) => void; page?: PageId }) {
   const { t } = useI18n();
+  const filterOptions = page ? pageFilterOptions[page] : undefined;
+  const [statusFilter, setStatusFilter] = useState("Semua");
   return <div className="toolbar">
     <div className="field-inline"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari data")} value={search} onChange={e => setSearch(e.target.value)} placeholder={t("Cari data...")} /></div>
-    <select aria-label={t("Filter status")}><option>{t("Semua status")}</option><option>{t("Aktif")}</option><option>{t("Perlu tindakan")}</option></select>
+    {filterOptions ? <select aria-label={t("Filter status")} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>{filterOptions.map(o => <option key={o} value={o}>{t(o)}</option>)}</select>
+      : <select aria-label={t("Filter status")}><option>{t("Semua status")}</option><option>{t("Aktif")}</option><option>{t("Perlu tindakan")}</option></select>}
   </div>;
 }
 
@@ -332,7 +327,7 @@ function CrudPage({ page, rows, setRows, openDialog, notify }: { page: PageId; r
   const filtered = rows.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(search.toLowerCase())));
   const remove = (row: Row) => { setRows(old => old.filter(item => item.id !== row.id)); notify(message(locale, "removed", { item: t(pageMeta[page].singular) })); };
   return <><PageHead page={page} action={() => openDialog({ mode: "create", page })} />
-    <section className="panel"><Toolbar search={search} setSearch={setSearch} />
+    <section className="panel"><Toolbar search={search} setSearch={setSearch} page={page} />
       {filtered.length ? <DataTable rows={filtered} module={page as ModuleId} onEdit={row => openDialog({ mode: "edit", page, row })} onDelete={remove} /> : <div className="empty"><ClipboardList /><div><strong>{t("Belum ada data yang cocok")}</strong>{locale === "en" ? `Change your search or add a new ${t(pageMeta[page].singular)}.` : `Ubah pencarian atau tambahkan ${pageMeta[page].singular} baru.`}</div></div>}
     </section></>;
 }
@@ -710,7 +705,7 @@ function PropertyCard({ row, onOpen }: { row: Row; onOpen: () => void }) {
   return <article className="property-card">
     <button type="button" className="property-card-open" onClick={onOpen} aria-label={`${t("Buka detail")} ${v(row.nama)}`}>
       <div className={`property-card-image ${row.image ? "has-image" : ""}`}>{row.image ? <img src={String(row.image)} alt={v(row.nama)} /> : <div className="property-image-placeholder"><Building2 /><span>{t("Gambar belum tersedia")}</span></div>}<span className={`vacancy-badge ${vacant === 0 ? "occupied" : ""}`}>{vacancyLabel}</span>{labels.length > 0 && <div className="property-card-labels">{labels.map(label => <span key={label}>{v(label)}</span>)}</div>}</div>
-      <div className="property-card-body"><h2>{v(row.nama)}</h2><p>{v(row.alamat || row.lokasi)}</p>{isMulti && <div className="vacancy-block"><div><span>{vacancySummary}</span><strong>{vacancyPercentage}%</strong></div><div className="vacancy-progress" role="progressbar" aria-label={t("Persentase unit kosong")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={vacancyPercentage}><span style={{ width: `${vacancyPercentage}%` }} /></div></div>}</div>
+      <div className="property-card-body"><h2>{v(row.nama)}</h2><p>{v(row.alamat || row.lokasi)}</p>{isMulti && <div className="vacancy-block"><div><span>{vacancySummary}</span><strong>{vacancyPercentage}%</strong></div><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="vacancy-progress" role="progressbar" aria-label={t("Persentase unit kosong")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={vacancyPercentage} style={{ flex: 1 }}><span style={{ width: `${vacancyPercentage}%` }} /></div><span style={{ fontSize: '.75rem', fontWeight: 700, minWidth: 32, textAlign: 'right', color: 'var(--text-secondary)' }}>{vacancyPercentage}%</span></div></div>}</div>
     </button>
     <div className="property-card-footer"><div><strong>{v(row.pendapatan || "Rp0")}</strong><span>/ {t("bulan")}</span></div></div>
   </article>;
@@ -1665,7 +1660,7 @@ function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRo
   const filtered = rows.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(search.toLowerCase())));
   const markPaid = () => { setRows(old => old.map(r => r.id === selected.id ? { ...r, sisa: "Rp0", status: "Lunas" } : r)); setSelected({ ...selected, sisa: "Rp0", status: "Lunas" }); notify(message(locale, "paid", { invoice: selected.id })); };
   return <><PageHead page="invoices" action={() => openDialog({ mode: "create", page: "invoices" })} /><div className="stats-strip"><div className="stat"><span>{t("Terlambat")}</span><strong>2</strong><small style={{ color: "var(--danger)" }}>{v("Rp1,55 jt")}</small></div><div className="stat"><span>{t("Jatuh tempo 7 hari")}</span><strong>1</strong></div><div className="stat"><span>{t("Belum dibayar")}</span><strong>3</strong></div><div className="stat"><span>{t("Lunas bulan ini")}</span><strong>18</strong><small>{v("Rp31,2 jt")}</small></div></div>
-    <div className="split"><section className="panel"><Toolbar search={search} setSearch={setSearch} /><DataTable rows={filtered} module="invoices" selected={selected.id} onSelect={setSelected} onEdit={row => openDialog({ mode: "edit", page: "invoices", row })} onDelete={row => { setRows(old => old.filter(r => r.id !== row.id)); notify(locale === "en" ? "Invoice deleted." : "Tagihan dihapus."); }} /></section>
+    <div className="split"><section className="panel"><Toolbar search={search} setSearch={setSearch} page="invoices" /><DataTable rows={filtered} module="invoices" selected={selected.id} onSelect={setSelected} onEdit={row => openDialog({ mode: "edit", page: "invoices", row })} onDelete={row => { setRows(old => old.filter(r => r.id !== row.id)); notify(locale === "en" ? "Invoice deleted." : "Tagihan dihapus."); }} /></section>
       <aside className="detail-pane"><div className="panel-head"><div><h2>{selected.id}</h2><p>{v(selected.periode)}</p></div><Status>{selected.status}</Status></div><div className="detail-section"><div className="detail-title">{selected.penyewa}</div><div className="detail-grid"><span>{t("Unit")}</span><span>{selected.unit}</span><span>{t("Jatuh tempo")}</span><span>{v(selected.jatuhTempo)}</span><span>{locale === "en" ? "Invoice total" : "Total tagihan"}</span><span>{v(selected.total)}</span><span>{t("Sisa tagihan")}</span><span className={selected.sisa !== "Rp0" ? "money-danger" : ""}>{v(selected.sisa)}</span></div></div>
         <div className="detail-section"><div className="detail-title">{t("Tautan pembayaran")}</div><div style={{ padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 16, fontSize: ".75rem", overflow: "hidden", textOverflow: "ellipsis" }}>sewain.id/bayar/{selected.id}</div><div className="actions" style={{ marginTop: 12 }}><button className="button" onClick={() => notify(locale === "en" ? "Payment link copied." : "Tautan pembayaran disalin.")}>{t("Salin tautan")}</button><button className="button" onClick={() => notify(message(locale, "reminder", { name: selected.penyewa }))}><MessageSquareText />{t("Kirim pengingat")}</button></div></div>
         <div className="detail-section"><div className="detail-title">{t("Riwayat pembayaran")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Pembayaran transfer")}</strong><span className="cell-sub">{t("Sebagian")} · {v("Rp1.200.000")}</span></span><time>6 Jun</time></div><div className="activity"><span className="activity-icon"><FileText /></span><span><strong>{t("Tagihan dibuat")}</strong><span className="cell-sub">{t("Otomatis dari sewa aktif")}</span></span><time>1 Jun</time></div></div>
