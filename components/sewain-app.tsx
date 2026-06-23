@@ -4,7 +4,7 @@ import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useSta
 import {
   Bell, Bot, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign,
   ClipboardList, CreditCard, FileText, FileType2, FolderOpen, Gauge, Home, MessageSquareText,
-  Bold, CalendarClock, CalendarPlus, Eraser, Eye, FileSignature, GripVertical, IdCard, ImagePlus, Italic, LayoutTemplate, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Printer, Search, Send, Settings, Share2, ShieldCheck, Tag, TicketCheck, Trash2, Upload,
+  Bold, CalendarClock, CalendarPlus, Download, Eraser, Eye, FileSignature, GripVertical, IdCard, ImagePlus, Italic, LayoutTemplate, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Printer, Search, Send, Settings, Share2, ShieldCheck, Tag, TicketCheck, Trash2, Upload,
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
 } from "lucide-react";
 import { invoices as seedInvoices, moduleData, properties as seedProperties, Row, units as seedUnits } from "@/lib/data";
@@ -2748,7 +2748,7 @@ function SewainContent() {
   const [reservations, setReservations] = useStoredRows("reservations", moduleData.reservations);
   const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
   const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
-  const [templates, setTemplates] = useStoredConfig<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
+  const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
   const [contractTemplates, setContractTemplates] = useStoredConfig<ContractTemplate[]>("contract-templates-v1", SEED_CONTRACT_TEMPLATES);
   const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
   const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
@@ -2823,7 +2823,7 @@ function SewainContent() {
   return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><AccessContext.Provider value={access}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
     {mobileNav && <button className="mobile-overlay" aria-label={t("Tutup navigasi")} onClick={() => setMobileNav(false)} />}
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-      <div className="brand"><span className="brand-mark"><img src="/logo.svg" alt="Sewain" width={24} height={24} style={{borderRadius: 6}} /></span><span className="brand-name">Sewain</span></div>
+      <div className="brand"><span className="brand-mark"><img src="/logo.svg" alt="Sewain" width={24} height={24} style={{borderRadius: 6}} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-hidden="true">{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</button></div>
       <nav className="nav" aria-label={t("Navigasi utama")}><div className="nav-label">{t("Operasional")}</div>{nav.slice(0, 10).filter(item => navAllowed(item.id)).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}<div className="nav-label">Workspace</div>{nav.slice(10).filter(item => navAllowed(item.id)).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}</nav>
       <div className="language-switcher"><span className="language-flag" aria-hidden="true">{locale === "id" ? "🇮🇩" : "🇬🇧"}</span><select id="locale" aria-label={t("Bahasa")} value={locale} onChange={event => setLocale(event.target.value as Locale)}><option value="id">Indonesia</option><option value="en">English</option></select></div>
       <div className="profile" title={sidebarCollapsed ? access.currentMember?.name : undefined}><span className="avatar">{initials(access.currentMember?.name || "?")}</span><div className="profile-copy"><strong>{access.currentMember?.name || "—"}</strong><span>{access.currentRole ? t(access.currentRole.name) : t("Tanpa peran")} · PT Makmur</span></div></div>
