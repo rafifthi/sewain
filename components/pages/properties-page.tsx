@@ -7,7 +7,7 @@ import { useI18n, type I18nState } from "@/components/context";
 import {
   PageHead, PropertyCard, PropertyDetail, isSingleUnit,
   PageId, DialogState, BookingState,
-} from "./_shared";
+} from "./shared";
 
 export function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();

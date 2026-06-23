@@ -23,6 +23,16 @@ import {
   DEFAULT_CONTRACT_TEMPLATE_ID, findContractTemplate, SEED_CONTRACT_TEMPLATES,
 } from "@/lib/contracts";
 import { Sidebar, Topbar } from "@/components/layout";
+import { CalendarPage } from "@/components/pages/calendar-page";
+import { InvoicePage } from "@/components/pages/invoices-page";
+import { TokenPage } from "@/components/pages/tokens-page";
+import { SettingsPage } from "@/components/pages/settings-page";
+import { MessageTemplatesPage } from "@/components/pages/messages-page";
+import { ReservationsPage } from "@/components/pages/reservations-page";
+import { ContractsPage } from "@/components/pages/contracts-page";
+import { DocumentsPage } from "@/components/pages/documents-page";
+import { CrudPage } from "@/components/pages/shared";
+import { TicketTimestamps, VendorDetail } from "@/components/pages/tickets-page";
 
 type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 
@@ -32,8 +42,8 @@ const pageFilterOptions: Record<string, string[]> = {
   tickets: ["Semua", "Baru", "Ditugaskan", "Dikerjakan", "Selesai"],
   invoices: ["Semua", "Belum dibayar", "Jatuh tempo", "Terlambat", "Lunas"],
 };
-type DialogState = null | { mode: "create" | "edit"; page: PageId; row?: Row };
-type BookingState = { propertyId?: string; unitId?: string };
+export type DialogState = null | { mode: "create" | "edit"; page: PageId; row?: Row };
+export type BookingState = { propertyId?: string; unitId?: string };
 type NotificationItem = {
   id: string;
   page: PageId;
@@ -179,7 +189,7 @@ function slug(value: unknown) {
   return String(value).toLowerCase().replace(/\s+/g, "-");
 }
 
-function toDateInputValue(value: unknown) {
+export function toDateInputValue(value: unknown) {
   const text = String(value || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const months: Record<string, string> = { jan: "01", feb: "02", mar: "03", apr: "04", mei: "05", may: "05", jun: "06", jul: "07", agu: "08", aug: "08", sep: "09", okt: "10", oct: "10", nov: "11", des: "12", dec: "12" };
@@ -192,21 +202,21 @@ function toDateInputValue(value: unknown) {
 // ---- Booking flow helpers -------------------------------------------------
 const VACANT_STATUSES = ["Kosong", "Akan kosong"];
 const idMonthsShort = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-const idMonthsLong = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+export const idMonthsLong = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
-const isVacant = (row?: Row) => !!row && VACANT_STATUSES.includes(String(row.status));
-const rupiah = (value: unknown) => Number(String(value ?? "0").replace(/[^\d]/g, "")) || 0;
-const todayInput = () => new Date().toISOString().slice(0, 10);
-const parseInput = (value: string) => { const d = new Date(`${(toDateInputValue(value) || todayInput())}T00:00:00Z`); return Number.isNaN(d.getTime()) ? new Date() : d; };
-const addMonths = (date: Date, months: number) => { const d = new Date(date); d.setUTCMonth(d.getUTCMonth() + months); return d; };
-const fmtShort = (d: Date) => `${d.getUTCDate()} ${idMonthsShort[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-const fmtMonthYear = (d: Date) => `${idMonthsShort[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+export const isVacant = (row?: Row) => !!row && VACANT_STATUSES.includes(String(row.status));
+export const rupiah = (value: unknown) => Number(String(value ?? "0").replace(/[^\d]/g, "")) || 0;
+export const todayInput = () => new Date().toISOString().slice(0, 10);
+export const parseInput = (value: string) => { const d = new Date(`${(toDateInputValue(value) || todayInput())}T00:00:00Z`); return Number.isNaN(d.getTime()) ? new Date() : d; };
+export const addMonths = (date: Date, months: number) => { const d = new Date(date); d.setUTCMonth(d.getUTCMonth() + months); return d; };
+export const fmtShort = (d: Date) => `${d.getUTCDate()} ${idMonthsShort[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+export const fmtMonthYear = (d: Date) => `${idMonthsShort[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 
 const isSingleUnit = (property?: Row) => !!property && Number(property.unit || 1) === 1;
 
 // Units for a property: real rows when present, otherwise a synthetic single unit
 // for single-unit properties that have no unit rows yet (e.g. ruko/kontrakan seeds).
-function unitsForProperty(units: Row[], property?: Row): Row[] {
+export function unitsForProperty(units: Row[], property?: Row): Row[] {
   if (!property) return [];
   const rows = units.filter(row => row._propertiId === property.id);
   if (rows.length) return rows;
@@ -220,17 +230,17 @@ function unitsForProperty(units: Row[], property?: Row): Row[] {
 }
 
 // Display label for a unit within a property ("Melati 104", or property name for single-unit).
-function unitLabelFor(property?: Row, unit?: Row): string {
+export function unitLabelFor(property?: Row, unit?: Row): string {
   if (!property || !unit) return "";
   const tag = String(property.nama).replace(/^(Kos|Kontrakan|Ruko|Apartemen|Rumah|Paviliun)\s+/i, "").split(/[\s,]+/)[0];
   return unit._synthetic ? String(property.nama) : `${tag} ${unit.unit}`;
 }
 
-const upsertRow = (setter: React.Dispatch<React.SetStateAction<Row[]>>, row: Row) =>
+export const upsertRow = (setter: React.Dispatch<React.SetStateAction<Row[]>>, row: Row) =>
   setter(old => old.some(r => r.id === row.id) ? old.map(r => r.id === row.id ? row : r) : [row, ...old]);
 
 // Recompute a property's occupancy after a unit's status changes.
-function syncPropertyOccupancy(propertyId: string, setProperties: React.Dispatch<React.SetStateAction<Row[]>>, units: Row[]) {
+export function syncPropertyOccupancy(propertyId: string, setProperties: React.Dispatch<React.SetStateAction<Row[]>>, units: Row[]) {
   setProperties(old => old.map(p => {
     if (p.id !== propertyId) return p;
     const rows = units.filter(u => u._propertiId === propertyId);
@@ -244,7 +254,7 @@ function syncPropertyOccupancy(propertyId: string, setProperties: React.Dispatch
 }
 
 // Parse the end of a reservation period string ("Jul 2025 - Jun 2026") to a Date (last day of month).
-function reservationEndDate(periode: unknown): Date | null {
+export function reservationEndDate(periode: unknown): Date | null {
   const text = String(periode || "");
   const end = text.includes(" - ") ? text.split(" - ")[1] : text;
   const m = end.trim().match(/^([A-Za-z]{3})\w*\s+(\d{4})$/);
@@ -253,10 +263,12 @@ function reservationEndDate(periode: unknown): Date | null {
   if (month < 0) return null;
   return new Date(Date.UTC(Number(m[2]), month + 1, 0));
 }
-const daysUntil = (date: Date | null) => date ? Math.ceil((date.getTime() - Date.now()) / 86400000) : Infinity;
-const isExpiringSoon = (r: Row, withinDays = 30) => String(r.status) === "Aktif" && daysUntil(reservationEndDate(r.periode)) <= withinDays;
+export const daysUntil = (date: Date | null) => date ? Math.ceil((date.getTime() - Date.now()) / 86400000) : Infinity;
+export const isExpiringSoon = (r: Row, withinDays = 30) => String(r.status) === "Aktif" && daysUntil(reservationEndDate(r.periode)) <= withinDays;
+export const RES_STATUSES = ["Booking", "Draf Kontrak", "Kontrak Ditandatangani", "Aktif", "Tidak Aktif"];
+export const statusRank = (s: unknown) => RES_STATUSES.indexOf(String(s));
 
-function Status({ children }: { children: React.ReactNode }) {
+export function Status({ children }: { children: React.ReactNode }) {
   const { v } = useI18n();
   const value = String(children);
   const state = /tidak aktif|tidak|nonaktif|belum ada sewa/i.test(value) ? "" :
@@ -267,7 +279,7 @@ function Status({ children }: { children: React.ReactNode }) {
   return <span className={`badge ${state} ${slug(value)}`}>{v(value)}</span>;
 }
 
-function PageHead({ page, action, back }: { page: PageId; action?: () => void; back?: () => void }) {
+export function PageHead({ page, action, back }: { page: PageId; action?: () => void; back?: () => void }) {
   const { t } = useI18n();
   const { can } = useAccess();
   const meta = pageMeta[page];
@@ -281,7 +293,7 @@ function PageHead({ page, action, back }: { page: PageId; action?: () => void; b
   </div>;
 }
 
-function Toolbar({ search, setSearch, page }: { search: string; setSearch: (v: string) => void; page?: PageId }) {
+export function Toolbar({ search, setSearch, page }: { search: string; setSearch: (v: string) => void; page?: PageId }) {
   const { t } = useI18n();
   const filterOptions = page ? pageFilterOptions[page] : undefined;
   const [statusFilter, setStatusFilter] = useState("Semua");
@@ -292,7 +304,7 @@ function Toolbar({ search, setSearch, page }: { search: string; setSearch: (v: s
   </div>;
 }
 
-function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId }) {
+export function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }: { rows: Row[]; onEdit: (r: Row) => void; onDelete: (r: Row) => void; onSelect?: (r: Row) => void; selected?: string; module?: ModuleId }) {
   const { t, v } = useI18n();
   const { can } = useAccess();
   const canEdit = !module || can(module, "edit");
@@ -308,9 +320,14 @@ function DataTable({ rows, onEdit, onDelete, onSelect, selected, module }: { row
 }
 
 
-function whatsappUrl(phone: unknown) {
+export function whatsappUrl(phone: unknown) {
   const digits = String(phone || "").replace(/\D/g, "");
   return `https://wa.me/${digits.startsWith("0") ? `62${digits.slice(1)}` : digits}`;
+}
+
+export function bodySnippet(body: string) {
+  const text = body.replace(/<[^>]*>/g, "").replace(/{{[^}]+}}/g, "___").slice(0, 100);
+  return text + (text.length >= 100 ? "..." : "");
 }
 
 function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, goToProperties }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; documents: Row[]; openDialog: (d: DialogState) => void; notify: (s: string) => void; goToProperties: () => void }) {
@@ -338,7 +355,7 @@ function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, g
     </section></>;
 }
 
-function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, goToProperties }: { tenant: Row; payments: Row[]; documents: Row[]; onBack: () => void; onEdit: () => void; onDelete: () => void; goToProperties: () => void }) {
+export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, goToProperties }: { tenant: Row; payments: Row[]; documents: Row[]; onBack: () => void; onEdit: () => void; onDelete: () => void; goToProperties: () => void }) {
   const { locale, t, v } = useI18n();
   const activeLease = tenant.status === "Aktif" ? 1 : 0;
   const rupiahValue = (value: unknown) => Number(String(value || "0").replace(/[^\d]/g, ""));
@@ -808,8 +825,8 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
 
 // Property defaults only support legacy/synthetic units. Once a unit row exists,
 // its own rent and deposit are the source of truth for reservations.
-const unitRent = (unit?: Row, property?: Row) => rupiah(unit?.sewa) || rupiah(property?.defaultPrice);
-const unitDeposit = (unit?: Row, property?: Row) => rupiah(unit?.deposit) || rupiah(property?.defaultDeposit) || unitRent(unit, property);
+export const unitRent = (unit?: Row, property?: Row) => rupiah(unit?.sewa) || rupiah(property?.defaultPrice);
+export const unitDeposit = (unit?: Row, property?: Row) => rupiah(unit?.deposit) || rupiah(property?.defaultDeposit) || unitRent(unit, property);
 
 type BookingDialogProps = {
   ctx: BookingState;
@@ -820,9 +837,25 @@ type BookingDialogProps = {
   onClose: () => void; onCreated: (id: string) => void; notify: (s: string) => void;
 };
 
-function TenantCombobox({ options, value, onSelect, onAddNew }: { options: Row[]; value: string; onSelect: (id: string) => void; onAddNew: () => void }) {
+export function TenantCombobox({ options, value, onSelect, onAddNew }: { options: Row[]; value: string; onSelect: (id: string) => void; onAddNew: () => void }) {
   const { t, v } = useI18n();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find(o => o.id === value);
+  const filtered = options.filter(o => `${o.nama} ${o.telepon}`.toLowerCase().includes(query.toLowerCase()));
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  return <div className="combobox" ref={ref}>
+    <input className="combobox-input" type="text" role="combobox" aria-expanded={open} aria-controls="tenant-combobox-menu" placeholder={t("Cari nama atau nomor penyewa...")} value={open ? query : (selected ? `${v(selected.nama)} · ${v(selected.telepon)}` : "")} onFocus={() => { setOpen(true); setQuery(""); }} onChange={e => { setQuery(e.target.value); setOpen(true); }} />
+    {open && <div className="combobox-menu" id="tenant-combobox-menu" role="listbox">
+      {filtered.length ? filtered.map(o => <button type="button" key={o.id} role="option" aria-selected={o.id === value} className={`combobox-option ${o.id === value ? "active" : ""}`} onClick={() => { onSelect(o.id); setOpen(false); }}><strong>{v(o.nama)}</strong><small>{v(o.telepon)}</small></button>) : <div className="combobox-empty">{t("Tidak ada penyewa cocok.")}</div>}
+      <button type="button" className="combobox-add" onMouseDown={e => e.preventDefault()} onClick={() => { setOpen(false); onAddNew(); }}><Plus size={15} />{t("Tambah penyewa baru")}</button>
+    </div>}
+  </div>;
 }
 
 
@@ -959,7 +992,7 @@ function GenericEditDialog({ state, onClose, onSave }: { state: Exclude<DialogSt
   return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}><form className="dialog" onSubmit={submit} role="dialog" aria-modal="true"><div className="dialog-head"><div><h2>{t(state.mode === "create" ? "Tambah" : "Edit")} {t(pageMeta[state.page].singular)}</h2><p>{locale === "en" ? "Changes are saved automatically on this device." : "Perubahan disimpan otomatis di perangkat ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div><div className="dialog-body"><div className="form-grid">{schema.map((field, i) => <div className={`form-field ${(field.multiline || (i === schema.length - 1 && schema.length % 2)) ? "full" : ""}`} key={field.key}><label htmlFor={field.key}>{t(field.label)}</label>{field.options ? <select id={field.key} value={values[field.key]} required onChange={e => update(field.key, e.target.value)}><option value="">{t("Pilih")} {t(field.label).toLowerCase()}</option>{field.options.map(o => <option key={o} value={o}>{t(o)}</option>)}</select> : field.multiline ? <textarea id={field.key} rows={5} value={values[field.key]} required onChange={e => update(field.key, e.target.value)} /> : <input id={field.key} type={field.type || "text"} inputMode={field.inputMode} value={values[field.key]} required onChange={e => update(field.key, e.target.value)} />}</div>)}</div></div><div className="dialog-actions"><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button className="button primary" type="submit">{t(state.mode === "create" ? "Tambahkan" : "Simpan perubahan")}</button></div></form></div>;
 }
 
-function TenantDialog({ state, onClose, onSave }: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
+export function TenantDialog({ state, onClose, onSave }: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
   const { locale, t } = useI18n();
   const row = state.row;
   const [values, setValues] = useState({
@@ -1059,6 +1092,82 @@ const tokenActionMap: Record<string, { label: string; labelEn: string; next: str
 
 
 
+
+function TokenOrderDialog(props: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
+  return <GenericEditDialog {...props} />;
+}
+
+function BookingDialog({ ctx, properties, units, setUnits, tenants, setTenants, setReservations, onClose, onCreated, notify }: BookingDialogProps) {
+  const { locale, t } = useI18n();
+  const initialProperty = ctx.propertyId || properties[0]?.id || "";
+  const [propertyId, setPropertyId] = useState(initialProperty);
+  const selectedProperty = properties.find(property => property.id === propertyId);
+  const selectableUnits = unitsForProperty(units, selectedProperty).filter(unit => isVacant(unit) || unit.id === ctx.unitId);
+  const [unitId, setUnitId] = useState(ctx.unitId || selectableUnits[0]?.id || "");
+  const [tenantId, setTenantId] = useState(tenants.find(tenant => !tenant.unit)?.id || tenants[0]?.id || "");
+  const selectedUnit = selectableUnits.find(unit => unit.id === unitId);
+  const selectedTenant = tenants.find(tenant => tenant.id === tenantId);
+  const [duration, setDuration] = useState("12 bulan");
+  const [rent, setRent] = useState(String(unitRent(selectedUnit, selectedProperty)));
+  const [deposit, setDeposit] = useState(String(unitDeposit(selectedUnit, selectedProperty)));
+
+  const changeProperty = (nextPropertyId: string) => {
+    const property = properties.find(item => item.id === nextPropertyId);
+    const firstUnit = unitsForProperty(units, property).find(isVacant);
+    setPropertyId(nextPropertyId);
+    setUnitId(firstUnit?.id || "");
+    setRent(String(unitRent(firstUnit, property)));
+    setDeposit(String(unitDeposit(firstUnit, property)));
+  };
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedProperty || !selectedUnit || !selectedTenant) {
+      notify(locale === "en" ? "Choose a property, unit, and tenant first." : "Pilih properti, unit, dan penyewa terlebih dahulu.");
+      return;
+    }
+    const start = parseInput(todayInput());
+    const end = addMonths(start, Number(duration.match(/\d+/)?.[0] || 12));
+    const label = unitLabelFor(selectedProperty, selectedUnit);
+    const id = `reservation-${Date.now()}`;
+    const row: Row = {
+      id,
+      kode: `RSV-${String(Date.now()).slice(-5)}`,
+      penyewa: String(selectedTenant.nama),
+      properti: String(selectedProperty.nama),
+      unit: label,
+      durasi: duration,
+      periode: `${fmtMonthYear(start)} - ${fmtMonthYear(end)}`,
+      sewa: formatRp(rupiah(rent)),
+      deposit: formatRp(rupiah(deposit)),
+      status: "Booking",
+      _propertyId: selectedProperty.id,
+      _unitId: selectedUnit.id,
+      _tenantId: selectedTenant.id,
+    };
+    setReservations(old => [row, ...old]);
+    setUnits(old => old.map(unit => unit.id === selectedUnit.id ? { ...unit, penyewa: String(selectedTenant.nama), sewa: formatRp(rupiah(rent)), deposit: formatRp(rupiah(deposit)), status: "Dipesan" } : unit));
+    setTenants(old => old.map(tenant => tenant.id === selectedTenant.id ? { ...tenant, unit: label, status: "Dipesan" } : tenant));
+    notify(message(locale, "saved", { item: t("reservasi") }));
+    onClose();
+    onCreated(id);
+  };
+
+  return <div className="backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+    <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="booking-dialog-title" onSubmit={submit}>
+      <div className="dialog-head"><div><h2 id="booking-dialog-title">{locale === "en" ? "New reservation" : "Buat reservasi"}</h2><p>{locale === "en" ? "Assign a tenant to an available unit." : "Tetapkan penyewa ke unit yang tersedia."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div>
+      <div className="dialog-body"><div className="form-grid">
+        <div className="form-field"><label htmlFor="booking-property">{t("Properti")}</label><select id="booking-property" value={propertyId} onChange={event => changeProperty(event.target.value)} required>{properties.map(property => <option key={property.id} value={property.id}>{String(property.nama)}</option>)}</select></div>
+        <div className="form-field"><label htmlFor="booking-unit">{t("Unit")}</label><select id="booking-unit" value={unitId} onChange={event => setUnitId(event.target.value)} required>{selectableUnits.map(unit => <option key={unit.id} value={unit.id}>{unitLabelFor(selectedProperty, unit)}</option>)}</select></div>
+        <div className="form-field full"><label htmlFor="booking-tenant">{t("Penyewa")}</label><select id="booking-tenant" value={tenantId} onChange={event => setTenantId(event.target.value)} required>{tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{String(tenant.nama)}</option>)}</select></div>
+        <div className="form-field"><label htmlFor="booking-duration">{t("Durasi")}</label><select id="booking-duration" value={duration} onChange={event => setDuration(event.target.value)}><option>6 bulan</option><option>12 bulan</option><option>24 bulan</option></select></div>
+        <div className="form-field"><label htmlFor="booking-rent">{t("Sewa per bulan")}</label><input id="booking-rent" type="number" min="0" step="1000" value={rent} onChange={event => setRent(event.target.value)} required /></div>
+        <div className="form-field"><label htmlFor="booking-deposit">Deposit</label><input id="booking-deposit" type="number" min="0" step="1000" value={deposit} onChange={event => setDeposit(event.target.value)} required /></div>
+      </div></div>
+      <div className="dialog-actions"><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button type="submit" className="button primary"><CalendarPlus />{locale === "en" ? "Create reservation" : "Buat reservasi"}</button></div>
+    </form>
+  </div>;
+}
 
 function EditDialog(props: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
   return props.state.page === "properties" ? <PropertyDialog {...props} /> : props.state.page === "tenants" ? <TenantDialog {...props} /> : props.state.page === "tickets" ? <TicketDialog {...props} /> : props.state.page === "tokens" ? <TokenOrderDialog {...props} /> : <GenericEditDialog {...props} />;

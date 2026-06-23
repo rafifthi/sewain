@@ -5,10 +5,11 @@ import { ClipboardList, MessageSquareText, Pencil } from "lucide-react";
 import { Row } from "@/lib/data";
 import { message } from "@/lib/i18n";
 import { useI18n, type I18nState } from "@/components/context";
+import { TenantDetail } from "@/components/sewain-app";
 import {
-  PageHead, Toolbar, Status, TenantDetail, whatsappUrl,
+  PageHead, Toolbar, Status, whatsappUrl,
   DialogState,
-} from "./_shared";
+} from "./shared";
 
 export function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, goToProperties }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; documents: Row[]; openDialog: (d: DialogState) => void; notify: (s: string) => void; goToProperties: () => void }) {
   const { locale, t, v } = useI18n();

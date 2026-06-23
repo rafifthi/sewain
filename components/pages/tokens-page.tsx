@@ -5,7 +5,7 @@ import { CheckCircle2, ClipboardList, Pencil, Plus, Search, Settings, Trash2, X 
 import { Row } from "@/lib/data";
 import { useI18n, useTokenConfig } from "@/components/context";
 import { formatRp, defaultTokenConfig, calcFee, type TokenConfig } from "@/lib/utility-token-config";
-import { PageHead, Toolbar, DataTable, CrudPage } from "./shared";
+import { PageHead, Toolbar, DataTable, CrudPage, type PageId } from "./shared";
 
 const tokenActionMap: Record<string, { label: string; labelEn: string; next: string }> = {
   "Dikonfirmasi": { label: "Proses Pesanan", labelEn: "Process Order", next: "Diproses" },
@@ -70,7 +70,7 @@ function FeeConfigDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function TokenPage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: string; row?: Row }) => void; notify: (s: string) => void }) {
+export function TokenPage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: PageId; row?: Row }) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(rows[0] ?? null);
   const [search, setSearch] = useState("");

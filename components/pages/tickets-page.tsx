@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, CalendarPlus, Check, ChevronLeft, ClipboardList, Eye, FileText, GripVertical, MapPin, MoreHorizontal, Pencil, Phone, Plus, Search, Tag, TicketCheck, Trash2, UserCheck, UserRound, Wrench, X } from "lucide-react";
+import { CalendarClock, CalendarPlus, Check, CheckCircle2, ChevronLeft, ClipboardList, Eye, FileText, GripVertical, MapPin, MoreHorizontal, Pencil, Phone, Plus, Search, Tag, TicketCheck, Trash2, UserCheck, UserRound, Wrench, X } from "lucide-react";
 import { moduleData, Row } from "@/lib/data";
 import { useI18n, useAccess } from "@/components/context";
 import { message } from "@/lib/i18n";
@@ -37,7 +37,7 @@ function useStoredRows(key: string, initial: Row[]): [Row[], React.Dispatch<Reac
   return [rows, setRows];
 }
 
-function TicketTimestamps({ row }: { row: Row }) {
+export function TicketTimestamps({ row }: { row: Row }) {
   const { locale } = useI18n();
   const entries = [
     { key: "created", label: locale === "en" ? "Created" : "Dibuat", value: row.createdAt, icon: CalendarPlus },
@@ -71,7 +71,7 @@ function TicketDragPreview({ preview }: { preview: Exclude<TicketDragPreviewStat
   </div>;
 }
 
-function VendorDetail({ vendor, tickets, onBack }: { vendor: Row; tickets: Row[]; onBack: () => void }) {
+export function VendorDetail({ vendor, tickets, onBack }: { vendor: Row; tickets: Row[]; onBack: () => void }) {
   const { locale, v } = useI18n();
   const labels = String(vendor.labels || "").split("|").filter(Boolean);
   const activeTickets = tickets.filter(ticket => ticket.status !== "Selesai");

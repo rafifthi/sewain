@@ -6,7 +6,7 @@ import { Row, properties as seedProperties, invoices as seedInvoices } from "@/l
 import { useI18n, type I18nState } from "@/components/context";
 import {
   PageHead, DataTable, isExpiringSoon, reservationEndDate, fmtShort, PageId,
-} from "./_shared";
+} from "./shared";
 
 export function Dashboard({ go, reservations }: { go: (p: PageId) => void; reservations: Row[] }) {
   const { t, v } = useI18n();

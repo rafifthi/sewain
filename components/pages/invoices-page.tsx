@@ -7,7 +7,7 @@ import { useI18n } from "@/components/context";
 import { message } from "@/lib/i18n";
 import { PageHead, Toolbar, DataTable, Status, type PageId } from "./shared";
 
-export function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: string; row?: Row }) => void; notify: (s: string) => void }) {
+export function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: PageId; row?: Row }) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row>(rows[0]);
   const [search, setSearch] = useState("");
