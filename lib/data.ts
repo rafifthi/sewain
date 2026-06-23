@@ -15,7 +15,7 @@ export const units: Row[] = [
   { id: "u103", unit: "103", tipe: "Deluxe", lantai: "1", penyewa: "Rizky Pratama", status: "Dihuni", sewa: "Rp1.500.000", deposit: "Rp1.500.000", tunggakan: "Rp350.000", meter: "5412 8821 7740", _propertiId: "p1" },
   { id: "u104", unit: "104", tipe: "Standar", lantai: "1", penyewa: "M. Iqbal Maulana", status: "Dipesan", sewa: "Rp1.200.000", deposit: "Rp1.200.000", tunggakan: "Rp0", meter: "5412 7733 0044", _propertiId: "p1" },
   { id: "u201", unit: "201", tipe: "Standar", lantai: "2", penyewa: "Nadia Putri", status: "Akan kosong", sewa: "Rp1.200.000", deposit: "Rp1.200.000", tunggakan: "Rp0", meter: "5412 6612 8899", _propertiId: "p1" },
-  { id: "u202", unit: "202", tipe: "Deluxe", lantai: "2", penyewa: "Belum ada", status: "Perawatan", sewa: "Rp1.500.000", deposit: "Rp1.500.000", tunggakan: "Rp0", meter: "5412 5500 3311", _propertiId: "p1" },
+  { id: "u202", unit: "202", tipe: "Deluxe", lantai: "2", penyewa: "Belum ada", status: "Kosong", sewa: "Rp1.500.000", deposit: "Rp1.500.000", tunggakan: "Rp0", meter: "5412 5500 3311", _propertiId: "p1" },
   { id: "u203", unit: "203", tipe: "Standar", lantai: "2", penyewa: "Dewi Lestari", status: "Dihuni", sewa: "Rp1.200.000", deposit: "Rp1.200.000", tunggakan: "Rp0", meter: "5412 4422 1166", _propertiId: "p1" },
 ];
 
@@ -36,8 +36,8 @@ export const moduleData: Record<string, Row[]> = {
     { id: "pln2", pelanggan: "Rizky Pratama", unit: "103", meter: "5412 8821 7740", nominal: "Rp50.000", biaya: "Rp3.000", status: "Dikonfirmasi", _unitId: "u103" },
   ],
   contracts: [
-    { id: "k1", nomor: "KTR-2025-031", penyewa: "Ahmad Fauzi", unit: "Melati 101", dibuat: "25 Feb 2025", status: "Ditandatangani" },
-    { id: "k2", nomor: "KTR-2025-044", penyewa: "M. Iqbal Maulana", unit: "Melati 104", dibuat: "20 Jun 2025", status: "Draf" },
+    { id: "k1", nomor: "KTR-2025-031", penyewa: "Ahmad Fauzi", unit: "Melati 101", dibuat: "25 Feb 2025", status: "Ditandatangani", properti: "Kos Melati Residence", durasi: "12 bulan", periode: "Mar 2025 - Feb 2026", sewa: "Rp1.200.000", deposit: "Rp1.200.000", kontak: "0812 3456 7890", jadwalMasuk: "1 Mar 2025", templateId: "ctpl-standard", _reservationId: "r1", signedTenant: "Ahmad Fauzi", signedTenantAt: "2025-02-25T10:12:00+07:00", signedOwner: "Andi Triono", signedOwnerAt: "2025-02-25T11:05:00+07:00" },
+    { id: "k2", nomor: "KTR-2025-044", penyewa: "M. Iqbal Maulana", unit: "Melati 104", dibuat: "20 Jun 2025", status: "Draf", properti: "Kos Melati Residence", durasi: "12 bulan", periode: "", sewa: "Rp1.200.000", deposit: "Rp1.200.000", kontak: "0819 8802 3104", jadwalMasuk: "", templateId: "ctpl-standard", _reservationId: "r2" },
   ],
   tickets: [
     { id: "x1", tiket: "TKT-0182", judul: "AC kamar tidak dingin", properti: "Kos Melati Residence", unit: "202", penyewa: "Siti Nurhaliza", telepon: "0813 7721 4410", masalah: "AC menyala tetapi **tidak mengeluarkan udara dingin** sejak semalam.\n\n- Suara unit outdoor lebih keras\n- Sudah mencoba mematikan listrik selama 10 menit", bukti: "", vendor: "CV Sejuk Abadi", status: "Ditugaskan", createdAt: "2026-06-18T08:35:00+07:00", assignedAt: "2026-06-18T10:10:00+07:00" },
