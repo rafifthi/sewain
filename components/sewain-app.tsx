@@ -3,8 +3,8 @@
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell, Bot, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign,
-  ClipboardList, CreditCard, FileText, FileType2, Gauge, Home, MessageSquareText,
-  Bold, CalendarClock, CalendarPlus, Download, Eye, GripVertical, IdCard, ImagePlus, Italic, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Search, Send, Settings, ShieldCheck, Tag, TicketCheck, Trash2,
+  ClipboardList, CreditCard, FileText, FileType2, FolderOpen, Gauge, Home, MessageSquareText,
+  Bold, CalendarClock, CalendarPlus, Download, Eraser, Eye, FileSignature, GripVertical, IdCard, ImagePlus, Italic, LayoutTemplate, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Printer, Search, Send, Settings, Share2, ShieldCheck, Tag, TicketCheck, Trash2, Upload,
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
 } from "lucide-react";
 import { invoices as seedInvoices, moduleData, properties as seedProperties, Row, units as seedUnits } from "@/lib/data";
@@ -18,6 +18,10 @@ import {
   can as roleCan, emptyPermissions, initials, Member, MemberStatus, ModuleId,
   PERMISSION_ACTIONS, PERMISSION_MODULES, PermissionAction, Role, SEED_MEMBERS, SEED_ROLES,
 } from "@/lib/access-control";
+import {
+  CONTRACT_ORG, CONTRACT_PLACEHOLDERS, ContractTemplate, contractValues,
+  DEFAULT_CONTRACT_TEMPLATE_ID, findContractTemplate, SEED_CONTRACT_TEMPLATES,
+} from "@/lib/contracts";
 
 type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 type DialogState = null | { mode: "create" | "edit"; page: PageId; row?: Row };
@@ -693,7 +697,7 @@ function Dashboard({ go, reservations }: { go: (p: PageId) => void; reservations
   </>;
 }
 
-function PropertyCard({ row, onOpen, onEdit, onDelete }: { row: Row; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
+function PropertyCard({ row, onOpen }: { row: Row; onOpen: () => void }) {
   const { locale, t, v } = useI18n();
   const total = Math.max(1, Number(row.unit || 1));
   const occupied = Math.max(0, Math.min(total, Number(row.terisi || 0)));
@@ -708,7 +712,7 @@ function PropertyCard({ row, onOpen, onEdit, onDelete }: { row: Row; onOpen: () 
       <div className={`property-card-image ${row.image ? "has-image" : ""}`}>{row.image ? <img src={String(row.image)} alt={v(row.nama)} /> : <div className="property-image-placeholder"><Building2 /><span>{t("Gambar belum tersedia")}</span></div>}<span className={`vacancy-badge ${vacant === 0 ? "occupied" : ""}`}>{vacancyLabel}</span>{labels.length > 0 && <div className="property-card-labels">{labels.map(label => <span key={label}>{v(label)}</span>)}</div>}</div>
       <div className="property-card-body"><h2>{v(row.nama)}</h2><p>{v(row.alamat || row.lokasi)}</p>{isMulti && <div className="vacancy-block"><div><span>{vacancySummary}</span><strong>{vacancyPercentage}%</strong></div><div className="vacancy-progress" role="progressbar" aria-label={t("Persentase unit kosong")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={vacancyPercentage}><span style={{ width: `${vacancyPercentage}%` }} /></div></div>}</div>
     </button>
-    <div className="property-card-footer"><div><strong>{v(row.pendapatan || "Rp0")}</strong><span>/ {t("bulan")}</span></div><div className="actions"><button type="button" className="icon-button" onClick={onEdit} aria-label={`${t("Edit")} ${v(row.nama)}`}><Pencil /></button><button type="button" className="icon-button" onClick={onDelete} aria-label={`${t("Hapus")} ${v(row.nama)}`}><Trash2 /></button></div></div>
+    <div className="property-card-footer"><div><strong>{v(row.pendapatan || "Rp0")}</strong><span>/ {t("bulan")}</span></div></div>
   </article>;
 }
 
@@ -727,20 +731,24 @@ function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onB
     const rowLabels = String(row.labels || row.tipe || "").split(/[|,]/).map(label => label.trim());
     return matchesSearch && (filter === "Semua" || filter === unitType || rowLabels.includes(filter));
   });
-  if (selected) return <PropertyDetail property={selected} units={units} setUnits={setUnits} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} notify={notify} />;
+  const liveSelected = selected ? rows.find(r => r.id === selected.id) || selected : null;
+  if (liveSelected) return <PropertyDetail property={liveSelected} units={units} setUnits={setUnits} setProperties={setRows} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} openDialog={openDialog} notify={notify} />;
   return <><PageHead page="properties" action={() => openDialog({ mode: "create", page: "properties" })} />
     <div className="property-list-toolbar"><div className="field-inline"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari properti")} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Cari properti...")} /></div><div className="property-filter-list" aria-label={t("Filter properti")}>{filters.map(item => <button type="button" className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>{v(item)}</button>)}</div></div>
-    {filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} onEdit={() => openDialog({ mode: "edit", page: "properties", row })} onDelete={() => { setRows(old => old.filter(item => item.id !== row.id)); notify(locale === "en" ? "Property removed from the list." : "Properti dihapus dari daftar."); }} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
+    {filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
   </>;
 }
 
-function PropertyDetail({ property, units, setUnits, invoices, tickets, onBook, onViewReservations, onBack, notify }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; notify: (s: string) => void }) {
+function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, onBook, onViewReservations, onBack, openDialog, notify }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
   const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
   const propertyUnits = unitsForProperty(units, property);
-  const [selectedId, setSelectedId] = useState<string>("");
   const [unitSearch, setUnitSearch] = useState("");
-  const selected = propertyUnits.find(row => row.id === selectedId);
+  const [unitDrawer, setUnitDrawer] = useState<Row | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [addUnit, setAddUnit] = useState(false);
+  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "" });
   const filteredUnits = propertyUnits.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(unitSearch.toLowerCase())));
   const total = propertyUnits.length || Number(property.unit || 0);
   const occupied = propertyUnits.filter(row => /dihuni/i.test(String(row.status))).length;
@@ -754,13 +762,52 @@ function PropertyDetail({ property, units, setUnits, invoices, tickets, onBook, 
   const waHref = property.contactPhone ? `https://wa.me/62${String(property.contactPhone).replace(/\D/g, "").replace(/^0/, "")}` : undefined;
   const singleUnit = isSingleUnit(property);
   const primaryUnit = singleUnit ? propertyUnits[0] : undefined;
+
+  const handleSetStatus = (status: string) => {
+    setProperties(old => old.map(r => r.id === property.id ? { ...r, status } : r));
+    notify(locale === "en" ? `Property set to ${status}.` : `Status properti diubah ke ${status}.`);
+    setShowMore(false);
+  };
+  const handleDeleteProperty = () => {
+    setProperties(old => old.filter(r => r.id !== property.id));
+    notify(locale === "en" ? "Property deleted." : "Properti dihapus.");
+    onBack();
+  };
+  const handleAddUnit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newUnit: Row = { id: `unit-${Date.now()}`, unit: unitForm.unit, tipe: unitForm.tipe, lantai: unitForm.lantai, penyewa: "Belum ada", status: "Kosong", sewa: unitForm.sewa ? formatRp(rupiah(unitForm.sewa)) : "Rp0", deposit: unitForm.deposit ? formatRp(rupiah(unitForm.deposit)) : "Rp0", tunggakan: "Rp0", meter: "-", _propertiId: property.id };
+    const nextUnits = [...units, newUnit];
+    setUnits(nextUnits);
+    setProperties(old => old.map(p => p.id === property.id ? { ...p, unit: Number(p.unit || 1) + 1 } : p));
+    notify(locale === "en" ? "Unit added." : "Unit berhasil ditambahkan.");
+    setAddUnit(false);
+    setUnitForm({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "" });
+  };
+
   const singleUnitView = primaryUnit ? <section className="single-unit-panel">
-    <div className="single-unit-head"><div><span className="eyebrow">{locale === "en" ? "Primary unit" : "Unit utama"}</span><h2>{v(property.nama)}</h2><p>{v(primaryUnit.tipe)} · {t("Lantai")} {v(primaryUnit.lantai)}</p></div><div className="single-unit-head-actions"><Status>{primaryUnit.status}</Status>{isVacant(primaryUnit) ? <button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: primaryUnit.id })}><CalendarPlus />{t("Buat pemesanan")}</button> : /perawatan/i.test(String(primaryUnit.status)) ? <button className="button" onClick={() => setActiveTab("tickets")}><Wrench />{locale === "en" ? "View maintenance" : "Lihat pemeliharaan"}</button> : <button className="button" onClick={onViewReservations}><WalletCards />{locale === "en" ? "View active lease" : "Lihat sewa aktif"}</button>}</div></div>
+    <div className="single-unit-head"><div><span className="eyebrow">{locale === "en" ? "Primary unit" : "Unit utama"}</span><h2>{v(property.nama)}</h2><p>{v(primaryUnit.tipe)} · {t("Lantai")} {v(primaryUnit.lantai)}</p></div><div className="single-unit-head-actions"><Status>{primaryUnit.status}</Status>{isVacant(primaryUnit) ? <button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: primaryUnit.id })}><CalendarPlus />{t("Buat pemesanan")}</button> : <button className="button" onClick={onViewReservations}><WalletCards />{locale === "en" ? "View active lease" : "Lihat sewa aktif"}</button>}</div></div>
     <div className="single-unit-facts"><section><span>{locale === "en" ? "Occupancy" : "Hunian"}</span><dl><div><dt>{t("Penyewa")}</dt><dd>{v(primaryUnit.penyewa)}</dd></div><div><dt>{t("Status")}</dt><dd>{v(primaryUnit.status)}</dd></div></dl></section><section><span>{locale === "en" ? "Pricing" : "Harga"}</span><dl><div><dt>{t("Sewa per bulan")}</dt><dd>{v(primaryUnit.sewa)}</dd></div><div><dt>Deposit</dt><dd>{v(primaryUnit.deposit || formatRp(unitDeposit(primaryUnit, property)))}</dd></div><div><dt>{t("Siklus penagihan")}</dt><dd>{v(property.billingCycle || "Bulanan")}</dd></div></dl></section><section><span>{locale === "en" ? "Utilities and balance" : "Utilitas dan saldo"}</span><dl><div><dt>{t("Nomor meter")}</dt><dd>{v(primaryUnit.meter || "-")}</dd></div><div><dt>{t("Tunggakan")}</dt><dd className={primaryUnit.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(primaryUnit.tunggakan || "Rp0")}</dd></div></dl></section></div>
     <div className="single-unit-activity"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div>
   </section> : null;
+
   return <>
-    <div className="page-head"><div><button className="button" onClick={onBack} style={{ marginBottom: 10 }}><ChevronLeft />{t("Semua properti")}</button><div className="property-title"><h1>{v(property.nama)}</h1><Status>{property.status}</Status></div></div><div className="actions"><button className="button" onClick={() => notify(locale === "en" ? "Property link copied." : "Tautan properti disalin.")}>{t("Bagikan")}</button><button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: selected && isVacant(selected) ? selected.id : undefined })}><Plus />{t("Buat pemesanan")}</button></div></div>
+    <div className="page-head">
+      <div><button className="button" onClick={onBack} style={{ marginBottom: 10 }}><ChevronLeft />{t("Semua properti")}</button><div className="property-title"><h1>{v(property.nama)}</h1><Status>{property.status}</Status></div></div>
+      <div className="actions">
+        <button className="button" onClick={() => openDialog({ mode: "edit", page: "properties", row: property })}><Pencil />{t("Edit")}</button>
+        <div className="more-menu-wrap">
+          <button className="icon-button" aria-label={t("Opsi lainnya")} onClick={() => setShowMore(v => !v)}><MoreHorizontal /></button>
+          {showMore && <><button className="more-dismiss" aria-hidden="true" onClick={() => setShowMore(false)} /><div className="more-popover" role="menu">
+            <button role="menuitem" onClick={() => { notify(locale === "en" ? "Property link copied." : "Tautan properti disalin."); setShowMore(false); }}><Share2 />{t("Bagikan")}</button>
+            <button role="menuitem" onClick={() => handleSetStatus(String(property.status) === "Aktif" ? "Tidak Aktif" : "Aktif")}><Eye />{String(property.status) === "Aktif" ? (locale === "en" ? "Set inactive" : "Nonaktifkan") : (locale === "en" ? "Set active" : "Aktifkan")}</button>
+            <div className="more-popover-divider" />
+            <button role="menuitem" className="more-popover-danger" onClick={() => { setShowMore(false); setShowDeleteConfirm(true); }}><Trash2 />{locale === "en" ? "Delete property" : "Hapus properti"}</button>
+          </div></>}
+        </div>
+        <button className="button primary" onClick={() => onBook({ propertyId: property.id })}><Plus />{t("Buat pemesanan")}</button>
+      </div>
+    </div>
+
     <section className="panel property-overview">
       <div className="property-overview-main">
         <div className="property-overview-media">{property.image ? <img src={String(property.image)} alt={v(property.nama)} /> : <div className="property-image-placeholder"><Building2 /><span>{t("Gambar belum tersedia")}</span></div>}</div>
@@ -771,6 +818,7 @@ function PropertyDetail({ property, units, setUnits, invoices, tickets, onBook, 
       </div>
       <div className="property-overview-metrics"><div><span>{t("Total unit")}</span><strong>{total}</strong></div><div><span>{t("Terisi")}</span><strong>{occupied}</strong><small>{occupancy}%</small></div><div><span>{t("Kosong")}</span><strong>{vacant}</strong></div><div><span>{t("Pendapatan bulan ini")}</span><strong>{v(property.pendapatan || "Rp0")}</strong></div></div>
     </section>
+
     <section className={`panel property-workspace ${singleUnit ? "single-unit-mode" : ""}`}>
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={activeTab === "units"} className={`tab ${activeTab === "units" ? "active" : ""}`} onClick={() => setActiveTab("units")}>{t("Unit")}<span className="tab-count">{propertyUnits.length}</span></button>
@@ -778,10 +826,35 @@ function PropertyDetail({ property, units, setUnits, invoices, tickets, onBook, 
         <button role="tab" aria-selected={activeTab === "tickets"} className={`tab ${activeTab === "tickets" ? "active" : ""}`} onClick={() => setActiveTab("tickets")}>{locale === "en" ? "Tickets" : "Tiket"}{openTickets.length > 0 && <span className="tab-count">{openTickets.length}</span>}</button>
       </div>
       {activeTab === "units" && singleUnitView}
-      {activeTab === "units" && <div className="property-unit-layout"><div className="property-unit-list"><Toolbar search={unitSearch} setSearch={setUnitSearch} />{filteredUnits.length ? <DataTable rows={filteredUnits} selected={selected?.id} onSelect={row => setSelectedId(row.id)} onEdit={row => { setSelectedId(row.id); isVacant(row) ? onBook({ propertyId: property.id, unitId: row.id }) : notify(locale === "en" ? "This unit is occupied. Use the lease to manage its tenant." : "Unit ini terisi. Kelola penyewanya melalui sewa."); }} onDelete={row => { setUnits(old => old.filter(r => r.id !== row.id)); notify(message(locale, "unitRemoved", { unit: row.unit })); }} /> : <div className="empty"><Building2 /><div><strong>{unitSearch ? t("Belum ada data yang cocok") : t("Belum ada unit")}</strong><span>{unitSearch ? t("Ubah pencarian atau filter untuk melihat properti lain.") : t("Tambahkan unit pada properti ini untuk mulai membuat pemesanan.")}</span></div></div>}</div><aside className="property-unit-detail">{selected ? <><div className="panel-head"><div><h2>{t("Detail unit")} {selected.unit}</h2><p>{v(selected.tipe)} · {t("Lantai")} {selected.lantai}</p></div><MoreHorizontal /></div><div className="detail-section"><div className="detail-title">{t("Status hunian")} <Status>{selected.status}</Status></div><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(selected.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(selected.sewa)}</span><span>Deposit</span><span>{v(selected.deposit || formatRp(unitDeposit(selected, property)))}</span><span>{t("Tunggakan")}</span><span className={selected.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(selected.tunggakan)}</span></div>{isVacant(selected) && <button className="button primary unit-booking-action" onClick={() => onBook({ propertyId: property.id, unitId: selected.id })}><CalendarPlus />{t("Pesan unit ini")}</button>}</div><div className="detail-section"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div></> : <div className="empty"><Building2 /><div><strong>{locale === "en" ? "Select a unit" : "Pilih unit"}</strong><span>{locale === "en" ? "Select a row to view the unit details." : "Pilih baris untuk melihat detail unit."}</span></div></div>}</aside></div>}
+      {activeTab === "units" && <div className="property-unit-list">
+        {!singleUnit && <div className="unit-list-head"><button className="button" onClick={() => setAddUnit(true)}><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div>}
+        <Toolbar search={unitSearch} setSearch={setUnitSearch} />
+        {filteredUnits.length ? <DataTable rows={filteredUnits} onSelect={row => setUnitDrawer(row)} onEdit={row => { isVacant(row) ? onBook({ propertyId: property.id, unitId: row.id }) : notify(locale === "en" ? "This unit is occupied. Use the lease to manage its tenant." : "Unit ini terisi. Kelola penyewanya melalui sewa."); }} onDelete={row => { setUnits(old => old.filter(r => r.id !== row.id)); notify(message(locale, "unitRemoved", { unit: row.unit })); }} /> : <div className="empty"><Building2 /><div><strong>{unitSearch ? t("Belum ada data yang cocok") : t("Belum ada unit")}</strong><span>{unitSearch ? t("Ubah pencarian atau filter untuk melihat properti lain.") : t("Tambahkan unit pada properti ini untuk mulai membuat pemesanan.")}</span></div></div>}
+      </div>}
       {activeTab === "invoices" && (propertyInvoices.length ? <div className="table-wrap"><table><thead><tr><th>ID</th><th>{t("Penyewa")}</th><th>Unit</th><th>{t("Periode")}</th><th>{t("Jatuh tempo")}</th><th>Total</th><th>Sisa</th><th>Status</th></tr></thead><tbody>{propertyInvoices.map(inv => <tr key={inv.id}><td><span className="ticket-id">{inv.id}</span></td><td>{v(inv.penyewa)}</td><td>{v(inv.unit)}</td><td>{v(inv.periode)}</td><td>{v(inv.jatuhTempo)}</td><td>{v(inv.total)}</td><td className={inv.sisa !== "Rp0" ? "money-danger" : ""}>{v(inv.sisa)}</td><td><Status>{inv.status}</Status></td></tr>)}</tbody></table></div> : <div className="empty"><CreditCard /><div><strong>{locale === "en" ? "No invoices" : "Belum ada tagihan"}</strong><span>{locale === "en" ? "Invoices for units in this property appear here." : "Tagihan unit properti ini akan muncul di sini."}</span></div></div>)}
       {activeTab === "tickets" && (propertyTickets.length ? <div className="table-wrap"><table><thead><tr><th>Tiket</th><th>Judul</th><th>Unit</th><th>{t("Penyewa")}</th><th>Vendor</th><th>Status</th></tr></thead><tbody>{propertyTickets.map(tkt => <tr key={tkt.id}><td><span className="ticket-id">{v(tkt.tiket)}</span></td><td>{v(tkt.judul)}</td><td>{v(tkt.unit)}</td><td>{v(tkt.penyewa)}</td><td>{v(tkt.vendor)}</td><td><Status>{tkt.status}</Status></td></tr>)}</tbody></table></div> : <div className="empty"><Wrench /><div><strong>{locale === "en" ? "No tickets" : "Belum ada tiket"}</strong><span>{locale === "en" ? "Maintenance tickets for this property appear here." : "Tiket pemeliharaan properti ini akan muncul di sini."}</span></div></div>)}
     </section>
+
+    {/* Unit side drawer */}
+    {unitDrawer && <>
+      <button className="more-dismiss" aria-hidden="true" onClick={() => setUnitDrawer(null)} />
+      <aside className="unit-drawer" role="dialog" aria-modal="true" aria-label={`${t("Detail unit")} ${unitDrawer.unit}`}>
+        <div className="unit-drawer-head">
+          <div><h2>{t("Detail unit")} {v(unitDrawer.unit)}</h2><p>{v(unitDrawer.tipe)} · {t("Lantai")} {v(unitDrawer.lantai)}</p></div>
+          <button className="icon-button" aria-label={t("Tutup")} onClick={() => setUnitDrawer(null)}><X /></button>
+        </div>
+        <div className="unit-drawer-body">
+          <div className="detail-section"><div className="detail-title">{t("Status hunian")} <Status>{unitDrawer.status}</Status></div><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(unitDrawer.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(unitDrawer.sewa)}</span><span>Deposit</span><span>{v(unitDrawer.deposit || formatRp(unitDeposit(unitDrawer, property)))}</span><span>{t("Tunggakan")}</span><span className={unitDrawer.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(unitDrawer.tunggakan)}</span><span>{t("Nomor meter")}</span><span>{v(unitDrawer.meter || "-")}</span></div>{isVacant(unitDrawer) && <button className="button primary unit-booking-action" onClick={() => { setUnitDrawer(null); onBook({ propertyId: property.id, unitId: unitDrawer.id }); }}><CalendarPlus />{t("Pesan unit ini")}</button>}</div>
+          <div className="detail-section"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div>
+        </div>
+      </aside>
+    </>}
+
+    {/* Delete property confirmation */}
+    {showDeleteConfirm && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setShowDeleteConfirm(false)}><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-property-title"><div className="dialog-head"><div><h2 id="delete-property-title">{locale === "en" ? "Delete property?" : "Hapus properti?"}</h2><p>{locale === "en" ? `This will permanently remove "${v(property.nama)}" and cannot be undone.` : `Tindakan ini akan menghapus "${v(property.nama)}" secara permanen dan tidak dapat dibatalkan.`}</p></div><button className="icon-button" aria-label={t("Tutup")} onClick={() => setShowDeleteConfirm(false)}><X /></button></div><div className="dialog-actions"><button className="button" onClick={() => setShowDeleteConfirm(false)}>{t("Batal")}</button><button className="button danger" onClick={handleDeleteProperty}><Trash2 />{locale === "en" ? "Delete" : "Hapus"}</button></div></div></div>}
+
+    {/* Add unit dialog */}
+    {addUnit && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setAddUnit(false)}><form className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-unit-title" onSubmit={handleAddUnit}><div className="dialog-head"><div><h2 id="add-unit-title">{locale === "en" ? "Add unit" : "Tambah unit"}</h2><p>{locale === "en" ? "Add a new unit to this property." : "Tambahkan unit baru ke properti ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={() => setAddUnit(false)}><X /></button></div><div className="dialog-body"><div className="form-grid"><div className="form-field"><label htmlFor="au-unit">{locale === "en" ? "Unit name / number" : "Nama / nomor unit"}</label><input id="au-unit" value={unitForm.unit} onChange={e => setUnitForm(f => ({ ...f, unit: e.target.value }))} required /></div><div className="form-field"><label htmlFor="au-tipe">{locale === "en" ? "Type" : "Tipe"}</label><select id="au-tipe" value={unitForm.tipe} onChange={e => setUnitForm(f => ({ ...f, tipe: e.target.value }))}>{["Standar", "Deluxe", "Premium", "Studio"].map(o => <option key={o}>{o}</option>)}</select></div><div className="form-field"><label htmlFor="au-lantai">{locale === "en" ? "Floor" : "Lantai"}</label><input id="au-lantai" value={unitForm.lantai} onChange={e => setUnitForm(f => ({ ...f, lantai: e.target.value }))} /></div><div className="form-field"><label htmlFor="au-sewa">{t("Sewa per bulan")}</label><div className="money-input"><span>Rp</span><input id="au-sewa" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.sewa} onChange={e => setUnitForm(f => ({ ...f, sewa: e.target.value }))} /></div></div><div className="form-field">  <label htmlFor="au-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="au-deposit" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.deposit} onChange={e => setUnitForm(f => ({ ...f, deposit: e.target.value }))} /></div></div></div></div><div className="dialog-actions"><button type="button" className="button" onClick={() => setAddUnit(false)}>{t("Batal")}</button><button type="submit" className="button primary"><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div></form></div>}
   </>;
 }
 
@@ -903,6 +976,7 @@ type ReservationsPageProps = {
   setInvoices: React.Dispatch<React.SetStateAction<Row[]>>;
   notify: (s: string) => void; focusId: string; onClearFocus: () => void;
   onBook: (ctx: BookingState) => void;
+  onOpenContract: (nomor: string) => void;
 };
 
 function ReservationsPage(props: ReservationsPageProps) {
@@ -938,13 +1012,11 @@ function ReservationsPage(props: ReservationsPageProps) {
     </section></>;
 }
 
-function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenants, setTenants, properties, setProperties, setContracts, setDocuments, setInvoices, notify, onBack }: ReservationsPageProps & { reservation: Row; onBack: () => void }) {
+function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenants, setTenants, properties, setProperties, setContracts, setDocuments, setInvoices, notify, onBack, onOpenContract }: ReservationsPageProps & { reservation: Row; onBack: () => void }) {
   const { locale, t, v } = useI18n();
   const endDate = reservationEndDate(reservation.periode);
-  const [moveInDate, setMoveInDate] = useState(todayInput());
   const [moveOutDate, setMoveOutDate] = useState(endDate ? endDate.toISOString().slice(0, 10) : todayInput());
   const [checklist, setChecklist] = useState({ deposit: false, contract: false, keys: false });
-  const [showPreview, setShowPreview] = useState(false);
   void rows;
 
   const status = String(reservation.status);
@@ -1011,18 +1083,18 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
 
   const toDraft = () => {
     const nomor = `KTR-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`;
-    upsertRow(setContracts, { id: `contract-${Date.now()}`, nomor, penyewa: String(reservation.penyewa), unit: String(reservation.unit), dibuat: fmtShort(new Date()), status: "Draf" });
+    const months = parseInt(String(reservation.durasi), 10) || 12;
+    const start = parseInput(todayInput());
+    upsertRow(setContracts, {
+      id: `contract-${Date.now()}`, nomor, penyewa: String(reservation.penyewa), unit: String(reservation.unit),
+      properti: String(reservation.properti), kontak: String(tenant?.telepon || "-"), durasi: String(reservation.durasi),
+      periode: `${fmtMonthYear(start)} - ${fmtMonthYear(addMonths(start, months))}`, sewa: String(reservation.sewa), deposit: String(reservation.deposit),
+      jadwalMasuk: fmtShort(start), dibuat: fmtShort(new Date()), status: "Draf", templateId: DEFAULT_CONTRACT_TEMPLATE_ID, _reservationId: String(reservation.id),
+    });
     upsertRow(setDocuments, { id: `doc-${Date.now()}`, nama: `Kontrak ${reservation.penyewa}.pdf`, kategori: "Kontrak", terkait: String(reservation.penyewa), diperbarui: fmtShort(new Date()), status: "Privat" });
     update({ status: "Draf Kontrak", _nomor: nomor });
     notify(message(locale, "draftCreated", { number: nomor }));
-  };
-  const sign = () => {
-    const start = parseInput(moveInDate);
-    const months = parseInt(String(reservation.durasi), 10) || 12;
-    const periode = `${fmtMonthYear(start)} - ${fmtMonthYear(addMonths(start, months))}`;
-    setContracts(old => old.map(c => c.nomor === reservation._nomor ? { ...c, status: "Ditandatangani" } : c));
-    update({ status: "Kontrak Ditandatangani", jadwalMasuk: fmtShort(start), periode });
-    notify(message(locale, "contractSigned", { date: fmtShort(start) }));
+    onOpenContract(nomor);
   };
   const activate = () => {
     const nextUnits = units.map(u => u.id === currentUnitId ? { ...u, penyewa: String(reservation.penyewa), status: "Dihuni" } : u);
@@ -1050,34 +1122,6 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
     notify(message(locale, "reservationEnded", { unit: String(reservation.unit) }));
   };
 
-  const contractText = () => [
-    `KONTRAK SEWA — ${reservation._nomor || reservation.kode}`, "",
-    `Penyewa  : ${tenant?.nama || reservation.penyewa}`,
-    `Kontak   : ${tenant?.telepon || "-"}`,
-    `Properti : ${reservation.properti}`,
-    `Unit     : ${reservation.unit}`,
-    `Durasi   : ${reservation.durasi}`,
-    `Periode  : ${reservation.periode || "-"}`,
-    `Sewa     : ${reservation.sewa} / bulan`,
-    `Deposit  : ${reservation.deposit}`, "",
-    "Dokumen ini dihasilkan oleh Sewain (mode simulasi).",
-  ].join("\n");
-  const shareContract = () => {
-    const msg = `Halo ${tenant?.nama || reservation.penyewa}, berikut kontrak sewa untuk ${reservation.unit}. Tautan: sewain.id/kontrak/${reservation.kode}`;
-    window.open(`${whatsappUrl(tenant?.telepon)}?text=${encodeURIComponent(msg)}`, "_blank");
-    notify(message(locale, "contractShared", { name: String(tenant?.nama || reservation.penyewa) }));
-  };
-  const downloadContract = () => {
-    const blob = new Blob([contractText()], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `Kontrak-${reservation.kode}.txt`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-    notify(message(locale, "contractDownloaded", { code: String(reservation.kode) }));
-  };
-
-  const signPreview = (() => { const s = parseInput(moveInDate); const m = parseInt(String(reservation.durasi), 10) || 12; return `${fmtMonthYear(s)} - ${fmtMonthYear(addMonths(s, m))}`; })();
   const checklistDone = checklist.deposit && checklist.contract && checklist.keys;
 
   return <>
@@ -1126,7 +1170,7 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
 
         {status === "Booking" && <div className="inline-empty"><span>{t("Reservasi dibuat. Buat draf kontrak untuk melanjutkan.")}</span><button className="button primary" onClick={toDraft}><FileType2 />{t("Buat draf kontrak")}</button></div>}
 
-        {status === "Draf Kontrak" && <div className="form-grid"><div className="form-field"><label htmlFor="resv-movein">{t("Jadwal masuk")}</label><input id="resv-movein" type="date" value={moveInDate} onChange={e => setMoveInDate(e.target.value)} /></div><div className="form-field"><label>{t("Periode sewa")}</label><input value={signPreview} readOnly /></div><div className="form-field full"><button className="button primary" onClick={sign}><PenLine />{t("Tandatangani kontrak")}</button></div></div>}
+        {status === "Draf Kontrak" && <div className="inline-empty"><span>{t("Draf kontrak dibuat. Lengkapi dan tandatangani di modul Kontrak.")}</span><button className="button primary" onClick={() => onOpenContract(String(reservation._nomor))}><FileSignature />{t("Buka kontrak")}</button></div>}
 
         {status === "Kontrak Ditandatangani" && <div><p className="subtext" style={{ marginBottom: 14 }}>{t("Jadwal masuk")}: {v(reservation.jadwalMasuk)}</p>
           <label className="check-row"><input type="checkbox" checked={checklist.deposit} onChange={e => setChecklist(c => ({ ...c, deposit: e.target.checked }))} /><span><strong>{t("Deposit diterima")}</strong><small>{t("Transfer bank")} · {v(reservation.deposit)}</small></span></label>
@@ -1140,25 +1184,471 @@ function ReservationDetail({ reservation, rows, setRows, units, setUnits, tenant
       </section>
 
       {rank >= 1 && <section className="panel tenant-card"><div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><FileText /></span><h2>{t("Kontrak sewa")}</h2></div><Status>{rank >= 2 ? "Ditandatangani" : "Draf"}</Status></div>
-        <div className="actions"><button className="button" onClick={shareContract}><MessageSquareText />{t("Bagikan ke penyewa")}</button><button className="button" onClick={downloadContract}><Download />{t("Unduh kontrak")}</button><button className="button" onClick={() => setShowPreview(true)}><Eye />{t("Pratinjau dokumen")}</button></div>
+        <div className="actions"><button className="button primary" onClick={() => onOpenContract(String(reservation._nomor))}><FileSignature />{t("Buka kontrak")}</button></div>
       </section>}
     </div>
     {showTenantForm && <TenantDialog state={{ mode: "create", page: "tenants" }} onClose={() => setShowTenantForm(false)} onSave={(_, row) => { upsertRow(setTenants, row); setTenantId(String(row.id)); setShowTenantForm(false); notify(message(locale, "saved", { item: t("penyewa") })); }} />}
-    {showPreview && <ContractPreviewModal reservation={reservation} tenant={tenant} onClose={() => setShowPreview(false)} />}
   </>;
 }
 
-function ContractPreviewModal({ reservation, tenant, onClose }: { reservation: Row; tenant?: Row; onClose: () => void }) {
-  const { t, v } = useI18n();
-  return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="contract-preview-title">
-    <div className="dialog-head"><div><h2 id="contract-preview-title">{t("Pratinjau kontrak")}</h2><p>{v(reservation._nomor || reservation.kode)}</p></div><button className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div>
-    <div className="dialog-body"><article className="contract-preview">
-      <header><h3>{t("Kontrak Sewa")}</h3><span>{v(reservation._nomor || reservation.kode)}</span></header>
-      <div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(tenant?.nama || reservation.penyewa)}</span><span>WhatsApp</span><span>{v(tenant?.telepon || "-")}</span><span>{t("Properti")}</span><span>{v(reservation.properti)}</span><span>{t("Unit")}</span><span>{v(reservation.unit)}</span><span>{t("Durasi")}</span><span>{v(reservation.durasi)}</span><span>{t("Periode sewa")}</span><span>{reservation.periode ? v(reservation.periode) : "—"}</span><span>{t("Sewa bulanan")}</span><span>{v(reservation.sewa)}</span><span>Deposit</span><span>{v(reservation.deposit)}</span></div>
-      <p className="subtext">{t("Dokumen ini dihasilkan oleh Sewain (mode simulasi).")}</p>
-    </article></div>
-    <div className="dialog-actions"><button className="button" onClick={onClose}>{t("Tutup")}</button></div>
-  </div></div>;
+// ---- Contract module ----------------------------------------------------
+
+type ContractsPageProps = {
+  contracts: Row[]; setContracts: React.Dispatch<React.SetStateAction<Row[]>>;
+  templates: ContractTemplate[]; setTemplates: (value: ContractTemplate[]) => void;
+  reservations: Row[]; setReservations: React.Dispatch<React.SetStateAction<Row[]>>;
+  tenants: Row[]; notify: (s: string) => void;
+  focusId: string; onClearFocus: () => void;
+};
+
+function ContractsPage({ contracts, setContracts, templates, setTemplates, reservations, setReservations, tenants, notify, focusId, onClearFocus }: ContractsPageProps) {
+  const { locale, t, v } = useI18n();
+  const { can } = useAccess();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const [view, setView] = useState<"list" | "template">("list");
+  const [selectedId, setSelectedId] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => { if (focusId) { setSelectedId(focusId); setView("list"); onClearFocus(); } }, [focusId]);
+
+  const selected = contracts.find(c => c.id === selectedId || c.nomor === selectedId);
+
+  if (view === "template") return <ContractTemplateManager templates={templates} setTemplates={setTemplates} notify={notify} onBack={() => setView("list")} />;
+
+  if (selected) return <ContractDetail contract={selected} setContracts={setContracts} templates={templates} reservations={reservations} setReservations={setReservations} notify={notify} onBack={() => setSelectedId("")} />;
+
+  const createContract = () => {
+    const nomor = `KTR-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`;
+    const row: Row = { id: `contract-${Date.now()}`, nomor, penyewa: "", unit: "", properti: "", kontak: "", durasi: "12 bulan", periode: "", sewa: "Rp0", deposit: "Rp0", jadwalMasuk: "", dibuat: fmtShort(new Date()), status: "Draf", templateId: DEFAULT_CONTRACT_TEMPLATE_ID };
+    upsertRow(setContracts, row);
+    setSelectedId(row.id);
+    notify(message(locale, "draftCreated", { number: nomor }));
+  };
+  const remove = (row: Row) => { setContracts(old => old.filter(c => c.id !== row.id)); notify(message(locale, "removed", { item: t("kontrak") })); };
+
+  const listCols = contracts.map(c => ({ id: c.id, nomor: c.nomor, penyewa: c.penyewa, unit: c.unit, dibuat: c.dibuat, status: c.status } as Row));
+  const filtered = listCols.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(search.toLowerCase())));
+  return <>
+    <div className="page-head">
+      <div><h1>{t("Kontrak")}</h1><p className="subtext">{t("Template dan kontrak sewa yang sudah dibuat.")}</p></div>
+      <div className="actions">
+        <button className="button" onClick={() => setView("template")}><LayoutTemplate />{L("Kelola template", "Manage templates")}</button>
+        {can("contracts", "create") && <button className="button primary" onClick={createContract}><Plus />{L("Buat kontrak", "New contract")}</button>}
+      </div>
+    </div>
+    <section className="panel"><Toolbar search={search} setSearch={setSearch} />
+      {filtered.length ? <DataTable rows={filtered} module="contracts" onEdit={row => setSelectedId(String(row.id))} onDelete={remove} onSelect={row => setSelectedId(String(row.id))} selected={selectedId} /> : <div className="empty"><FileText /><div><strong>{L("Belum ada kontrak", "No contracts yet")}</strong>{L("Buat kontrak baru atau tandatangani draf dari reservasi.", "Create a new contract or sign a draft from a reservation.")}</div></div>}
+    </section>
+  </>;
+}
+
+function ContractDetail({ contract, setContracts, templates, reservations, setReservations, notify, onBack }: { contract: Row; setContracts: React.Dispatch<React.SetStateAction<Row[]>>; templates: ContractTemplate[]; reservations: Row[]; setReservations: React.Dispatch<React.SetStateAction<Row[]>>; notify: (s: string) => void; onBack: () => void }) {
+  const { locale, t, v } = useI18n();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const [signParty, setSignParty] = useState<null | "tenant" | "owner">(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const openSign = (party: "tenant" | "owner") => { setPreviewOpen(false); setSignParty(party); };
+
+  const editable = String(contract.status) !== "Ditandatangani";
+  const [form, setForm] = useState({
+    templateId: String(contract.templateId || DEFAULT_CONTRACT_TEMPLATE_ID),
+    penyewa: String(contract.penyewa || ""), kontak: String(contract.kontak || ""),
+    properti: String(contract.properti || ""), unit: String(contract.unit || ""),
+    durasi: String(contract.durasi || "12 bulan"), periode: String(contract.periode || ""),
+    sewa: String(rupiah(contract.sewa)), deposit: String(rupiah(contract.deposit)),
+    jadwalMasuk: toDateInputValue(String(contract.jadwalMasuk || "")),
+  });
+  const setField = (key: keyof typeof form, value: string) => setForm(f => ({ ...f, [key]: value }));
+
+  const template = findContractTemplate(templates, contract.templateId);
+  const values = contractValues(contract);
+  const body = renderPreview(template?.body || "", values);
+
+  const update = (patch: Record<string, string>) => setContracts(old => old.map(c => c.id === contract.id ? { ...c, ...patch } : c));
+
+  const saveDraft = () => {
+    update({
+      templateId: form.templateId, penyewa: form.penyewa, kontak: form.kontak, properti: form.properti, unit: form.unit,
+      durasi: form.durasi, periode: form.periode,
+      sewa: form.sewa ? formatRp(rupiah(form.sewa)) : "Rp0", deposit: form.deposit ? formatRp(rupiah(form.deposit)) : "Rp0",
+      jadwalMasuk: form.jadwalMasuk ? fmtShort(parseInput(form.jadwalMasuk)) : "",
+    });
+    notify(message(locale, "saved", { item: t("kontrak") }));
+  };
+
+  const completeSign = (party: "tenant" | "owner", signature: string, name: string) => {
+    const at = new Date().toISOString();
+    const patch: Record<string, string> = party === "tenant"
+      ? { tenantSignature: signature, signedTenant: name, signedTenantAt: at }
+      : { ownerSignature: signature, signedOwner: name, signedOwnerAt: at };
+    const tenantDone = party === "tenant" ? true : Boolean(contract.signedTenant);
+    const ownerDone = party === "owner" ? true : Boolean(contract.signedOwner);
+    const fullySigned = tenantDone && ownerDone;
+    patch.status = fullySigned ? "Ditandatangani" : "Menunggu tanda tangan";
+    update(patch);
+    setSignParty(null);
+    if (fullySigned && contract._reservationId) {
+      setReservations(old => old.map(r => r.id === contract._reservationId && statusRank(String(r.status)) < 2
+        ? { ...r, status: "Kontrak Ditandatangani", _nomor: String(contract.nomor), jadwalMasuk: String(contract.jadwalMasuk || r.jadwalMasuk || ""), periode: String(contract.periode || r.periode || "") }
+        : r));
+    }
+    notify(L("Kontrak ditandatangani oleh ", "Signed by ") + name + ".");
+  };
+
+  const shareContract = () => {
+    const phone = contract.kontak;
+    const msg = L(`Halo ${v(contract.penyewa)}, berikut kontrak sewa untuk ${v(contract.unit)}. Nomor: ${v(contract.nomor)}.`, `Hi ${v(contract.penyewa)}, here is the rental contract for ${v(contract.unit)}. No: ${v(contract.nomor)}.`);
+    window.open(`${whatsappUrl(phone)}?text=${encodeURIComponent(msg)}`, "_blank");
+    notify(message(locale, "contractShared", { name: String(contract.penyewa) }));
+  };
+  const signatureCard = (party: "tenant" | "owner") => {
+    const isTenant = party === "tenant";
+    const sig = isTenant ? contract.tenantSignature : contract.ownerSignature;
+    const name = isTenant ? contract.signedTenant : contract.signedOwner;
+    const at = isTenant ? contract.signedTenantAt : contract.signedOwnerAt;
+    const role = isTenant ? L("Pihak Kedua (Penyewa)", "Second Party (Tenant)") : L("Pihak Pertama (Pemilik)", "First Party (Owner)");
+    const fallbackName = isTenant ? String(contract.penyewa || "—") : CONTRACT_ORG.pemilik;
+    return <div className="signature-card">
+      <span className="signature-role">{role}</span>
+      <div className="signature-slot">
+        {sig ? <img src={String(sig)} alt={`${L("Tanda tangan", "Signature")} ${v(String(name))}`} />
+          : name ? <span className="signature-typed">{v(String(name))}</span>
+            : <span className="signature-empty">{L("Belum ditandatangani", "Not signed yet")}</span>}
+      </div>
+      <strong className="signature-name">{name ? v(String(name)) : v(fallbackName)}</strong>
+      {at ? <small>{L("Ditandatangani", "Signed")} · {new Date(String(at)).toLocaleString(locale === "en" ? "en-GB" : "id-ID", { dateStyle: "medium", timeStyle: "short" })}</small>
+        : <button className="button signature-btn" onClick={() => setSignParty(party)}><PenLine />{L("Tandatangani", "Sign")}</button>}
+    </div>;
+  };
+
+  return <>
+    <button className="button tenant-back no-print" onClick={onBack}><ChevronLeft />{L("Semua kontrak", "All contracts")}</button>
+    <div className="page-head no-print">
+      <div><div className="property-title"><h1>{v(contract.nomor)}</h1><Status>{contract.status}</Status></div><p className="subtext">{contract.penyewa ? v(contract.penyewa) : L("Tanpa penyewa", "No tenant")}{contract.unit ? ` · ${v(contract.unit)}` : ""}</p></div>
+      <div className="actions">
+        <button className={`button${!editable ? " primary" : ""}`} onClick={() => setPreviewOpen(true)}><Eye />{L("Pratinjau", "Preview")}</button>
+        {editable && <button className="button primary" onClick={() => openSign("tenant")}><FileSignature />{L("Tandatangani", "Sign")}</button>}
+      </div>
+    </div>
+
+    {editable && <section className="panel tenant-card no-print"><div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><WalletCards /></span><h2>{L("Data kontrak", "Contract details")}</h2></div><button className="button" onClick={saveDraft}><Check />{t("Simpan perubahan")}</button></div>
+      <div className="form-grid">
+        <div className="form-field full"><label htmlFor="cd-template">{L("Template", "Template")}</label><select id="cd-template" value={form.templateId} onChange={e => setField("templateId", e.target.value)}>{templates.map(tpl => <option key={tpl.id} value={tpl.id}>{v(tpl.nama)}</option>)}</select></div>
+        <div className="form-field"><label htmlFor="cd-penyewa">{t("Penyewa")}</label><input id="cd-penyewa" value={form.penyewa} onChange={e => setField("penyewa", e.target.value)} /></div>
+        <div className="form-field"><label htmlFor="cd-kontak">{L("Kontak", "Contact")}</label><input id="cd-kontak" value={form.kontak} onChange={e => setField("kontak", e.target.value)} /></div>
+        <div className="form-field"><label htmlFor="cd-properti">{t("Properti")}</label><input id="cd-properti" value={form.properti} onChange={e => setField("properti", e.target.value)} /></div>
+        <div className="form-field"><label htmlFor="cd-unit">{t("Unit")}</label><input id="cd-unit" value={form.unit} onChange={e => setField("unit", e.target.value)} /></div>
+        <div className="form-field"><label htmlFor="cd-durasi">{t("Durasi")}</label><select id="cd-durasi" value={form.durasi} onChange={e => setField("durasi", e.target.value)}>{["1 bulan", "3 bulan", "6 bulan", "12 bulan", "24 bulan"].map(o => <option key={o} value={o}>{v(o)}</option>)}</select></div>
+        <div className="form-field"><label htmlFor="cd-periode">{t("Periode sewa")}</label><input id="cd-periode" value={form.periode} onChange={e => setField("periode", e.target.value)} placeholder="Mar 2025 - Feb 2026" /></div>
+        <div className="form-field"><label htmlFor="cd-sewa">{t("Sewa bulanan")}</label><div className="money-input"><span>Rp</span><input id="cd-sewa" type="number" inputMode="numeric" min="0" step="1000" value={form.sewa} onChange={e => setField("sewa", e.target.value)} /></div></div>
+        <div className="form-field"><label htmlFor="cd-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="cd-deposit" type="number" inputMode="numeric" min="0" step="1000" value={form.deposit} onChange={e => setField("deposit", e.target.value)} /></div></div>
+        <div className="form-field"><label htmlFor="cd-masuk">{t("Jadwal masuk")}</label><input id="cd-masuk" type="date" value={form.jadwalMasuk} onChange={e => setField("jadwalMasuk", e.target.value)} /></div>
+      </div>
+    </section>}
+
+    <section className="panel contract-paper print-only" aria-hidden="true">
+      <article className="contract-document">
+        <div className="contract-body">{body}</div>
+        <div className="contract-signatures">{signatureCard("owner")}{signatureCard("tenant")}</div>
+        <p className="contract-disclaimer">{t("Dokumen ini dihasilkan oleh Sewain (mode simulasi).")}</p>
+      </article>
+    </section>
+
+    {previewOpen && <ContractPreviewDialog
+      contract={contract} body={body}
+      onExport={() => window.print()}
+      onShare={shareContract}
+      onClose={() => setPreviewOpen(false)}
+      onSign={editable ? openSign : undefined} />}
+
+    {signParty && <ContractSignDialog
+      party={signParty}
+      defaultName={signParty === "tenant" ? String(contract.penyewa || "") : CONTRACT_ORG.pemilik}
+      onClose={() => setSignParty(null)}
+      onSign={(sig, name) => completeSign(signParty, sig, name)} />}
+  </>;
+}
+
+function ContractSignDialog({ party, defaultName, onClose, onSign }: { party: "tenant" | "owner"; defaultName: string; onClose: () => void; onSign: (signature: string, name: string) => void }) {
+  const { locale, t } = useI18n();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const [mode, setMode] = useState<"draw" | "upload">("draw");
+  const [name, setName] = useState(defaultName);
+  const [agreed, setAgreed] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const [uploaded, setUploaded] = useState("");
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#1f2937";
+  }, [mode]);
+
+  const pos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) * (canvas.width / rect.width), y: (e.clientY - rect.top) * (canvas.height / rect.height) };
+  };
+  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const ctx = canvasRef.current?.getContext("2d"); if (!ctx) return;
+    drawing.current = true; canvasRef.current?.setPointerCapture(e.pointerId);
+    const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y);
+  };
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current?.getContext("2d"); if (!ctx) return;
+    const { x, y } = pos(e); ctx.lineTo(x, y); ctx.stroke(); setHasDrawn(true);
+  };
+  const end = () => { drawing.current = false; };
+  const clearCanvas = () => {
+    const canvas = canvasRef.current; const ctx = canvas?.getContext("2d");
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+  };
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setUploaded(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
+  const ready = name.trim() && agreed && (mode === "draw" ? hasDrawn : Boolean(uploaded));
+  const submit = () => {
+    if (!ready) return;
+    const signature = mode === "draw" ? (canvasRef.current?.toDataURL("image/png") || "") : uploaded;
+    onSign(signature, name.trim());
+  };
+  const roleLabel = party === "tenant" ? L("Penyewa", "Tenant") : L("Pemilik", "Owner");
+
+  return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+    <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="sign-title">
+      <div className="dialog-head"><div><h2 id="sign-title">{L("Tanda tangan elektronik", "Electronic signature")}</h2><p>{roleLabel}</p></div><button className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div>
+      <div className="dialog-body">
+        <div className="sign-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === "draw"} className={`sign-tab ${mode === "draw" ? "active" : ""}`} onClick={() => setMode("draw")}><PenLine />{L("Gambar", "Draw")}</button>
+          <button type="button" role="tab" aria-selected={mode === "upload"} className={`sign-tab ${mode === "upload" ? "active" : ""}`} onClick={() => setMode("upload")}><Upload />{L("Unggah gambar", "Upload image")}</button>
+        </div>
+        {mode === "draw" ? <div className="signature-pad-wrap">
+          <canvas ref={canvasRef} width={520} height={180} className="signature-pad" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerLeave={end} />
+          <button type="button" className="button signature-clear" onClick={clearCanvas}><Eraser />{L("Bersihkan", "Clear")}</button>
+        </div> : <div className="signature-upload">
+          {uploaded ? <div className="signature-upload-preview"><img src={uploaded} alt={L("Pratinjau tanda tangan", "Signature preview")} /><button type="button" className="button" onClick={() => setUploaded("")}><Trash2 />{L("Hapus", "Remove")}</button></div>
+            : <label className="signature-dropzone"><ImagePlus /><span>{L("Pilih gambar tanda tangan (PNG/JPG)", "Choose a signature image (PNG/JPG)")}</span><input type="file" accept="image/*" onChange={onFile} hidden /></label>}
+        </div>}
+        <div className="form-field full" style={{ marginTop: 16 }}><label htmlFor="sign-name">{L("Nama lengkap penandatangan", "Signatory full name")}</label><input id="sign-name" value={name} onChange={e => setName(e.target.value)} /></div>
+        <label className="check-row sign-agree"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} /><span><strong>{L("Saya menyetujui isi kontrak", "I agree to the contract terms")}</strong><small>{L("Tanda tangan ini sah secara elektronik.", "This signature is electronically valid.")}</small></span></label>
+      </div>
+      <div className="dialog-actions"><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button type="button" className="button primary" disabled={!ready} onClick={submit}><PenLine />{L("Tandatangani", "Sign")}</button></div>
+    </div>
+  </div>;
+}
+
+function ContractPreviewDialog({ contract, body, onExport, onShare, onClose, onSign }: { contract: Row; body: string; onExport: () => void; onShare: () => void; onClose: () => void; onSign?: (party: "tenant" | "owner") => void }) {
+  const { locale, t, v } = useI18n();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+
+  const sigCard = (party: "tenant" | "owner") => {
+    const isTenant = party === "tenant";
+    const sig = isTenant ? contract.tenantSignature : contract.ownerSignature;
+    const name = isTenant ? contract.signedTenant : contract.signedOwner;
+    const at = isTenant ? contract.signedTenantAt : contract.signedOwnerAt;
+    const role = isTenant ? L("Pihak Kedua (Penyewa)", "Second Party (Tenant)") : L("Pihak Pertama (Pemilik)", "First Party (Owner)");
+    const fallbackName = isTenant ? String(contract.penyewa || "—") : CONTRACT_ORG.pemilik;
+    return <div className="signature-card">
+      <span className="signature-role">{role}</span>
+      <div className="signature-slot">
+        {sig ? <img src={String(sig)} alt={`${L("Tanda tangan", "Signature")} ${v(String(name))}`} />
+          : name ? <span className="signature-typed">{v(String(name))}</span>
+            : <span className="signature-empty">{L("Belum ditandatangani", "Not signed yet")}</span>}
+      </div>
+      <strong className="signature-name">{name ? v(String(name)) : v(fallbackName)}</strong>
+      {at ? <small>{L("Ditandatangani", "Signed")} · {new Date(String(at)).toLocaleString(locale === "en" ? "en-GB" : "id-ID", { dateStyle: "medium", timeStyle: "short" })}</small>
+        : onSign ? <button className="button signature-btn" onClick={() => onSign(party)}><PenLine />{L("Tandatangani", "Sign")}</button> : null}
+    </div>;
+  };
+
+  return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+    <div className="dialog contract-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+      <div className="dialog-head">
+        <div><h2 id="preview-title">{v(contract.nomor)}</h2><p className="subtext-inline"><Status>{contract.status}</Status></p></div>
+        <button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button>
+      </div>
+      <div className="contract-preview-body">
+        <section className="panel contract-paper"><article className="contract-document">
+          <div className="contract-body">{body}</div>
+          <div className="contract-signatures">{sigCard("owner")}{sigCard("tenant")}</div>
+          <p className="contract-disclaimer">{t("Dokumen ini dihasilkan oleh Sewain (mode simulasi).")}</p>
+        </article></section>
+      </div>
+      <div className="dialog-actions">
+        <button type="button" className="button" onClick={onClose}>{t("Tutup")}</button>
+        <span className="dialog-spacer" />
+        <button type="button" className="button" onClick={onShare}><MessageSquareText />{L("Bagikan ke penyewa", "Share with tenant")}</button>
+        <button type="button" className="button primary" onClick={onExport}><Printer />{L("Export PDF", "Export PDF")}</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function ContractTemplateManager({ templates, setTemplates, notify, onBack }: { templates: ContractTemplate[]; setTemplates: (value: ContractTemplate[]) => void; notify: (s: string) => void; onBack: () => void }) {
+  const { locale, t, v } = useI18n();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const [editing, setEditing] = useState<ContractTemplate | null>(null);
+
+  if (editing) return <ContractTemplateEditor template={editing} onBack={() => setEditing(null)} onSave={updated => {
+    setTemplates(templates.some(tpl => tpl.id === updated.id) ? templates.map(tpl => tpl.id === updated.id ? updated : tpl) : [updated, ...templates]);
+    setEditing(null);
+    notify(L("Template kontrak disimpan.", "Contract template saved."));
+  }} onDelete={editing.system ? undefined : () => {
+    setTemplates(templates.filter(tpl => tpl.id !== editing.id));
+    setEditing(null);
+    notify(L("Template dihapus.", "Template deleted."));
+  }} />;
+
+  const createTemplate = () => setEditing({ id: `ctpl-${Date.now()}`, nama: "", body: "" });
+  return <>
+    <button className="button tenant-back" onClick={onBack}><ChevronLeft />{L("Semua kontrak", "All contracts")}</button>
+    <div className="page-head"><div><h1>{L("Template kontrak", "Contract templates")}</h1><p className="subtext">{L("Kelola klausa kontrak dengan placeholder yang terisi otomatis.", "Manage contract clauses with auto-filled placeholders.")}</p></div><div className="actions"><button className="button primary" onClick={createTemplate}><Plus />{L("Template baru", "New template")}</button></div></div>
+    <section className="panel template-list-panel"><div className="template-list">
+      {templates.map(tpl => <article className="template-row" key={tpl.id}>
+        <button type="button" className="template-row-main" onClick={() => setEditing(tpl)}>
+          <span className="template-row-icon"><FileText /></span>
+          <span className="template-row-copy">
+            <span className="template-row-title"><strong>{v(tpl.nama) || L("Template tanpa nama", "Untitled template")}</strong>{tpl.system && <span className="template-badge">{L("Sistem", "System")}</span>}</span>
+            <span className="template-row-snippet">{bodySnippet(tpl.body)}</span>
+          </span>
+        </button>
+        <div className="template-row-actions"><button type="button" className="button template-edit-button" onClick={() => setEditing(tpl)}><Pencil />{L("Ubah", "Edit")}</button></div>
+      </article>)}
+    </div></section>
+  </>;
+}
+
+function ContractTemplateEditor({ template, onBack, onSave, onDelete }: { template: ContractTemplate; onBack: () => void; onSave: (template: ContractTemplate) => void; onDelete?: () => void }) {
+  const { locale, t, v } = useI18n();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const [nama, setNama] = useState(template.nama);
+  const [body, setBody] = useState(template.body);
+
+  const sample: Record<string, string> = { nomor: "KTR-2025-031", tanggal: "25 Feb 2025", penyewa: "Ahmad Fauzi", kontak: "0812 3456 7890", properti: "Kos Melati Residence", unit: "Melati 101", durasi: "12 bulan", periode: "Mar 2025 - Feb 2026", sewa: "Rp1.200.000", deposit: "Rp1.200.000", jadwalMasuk: "1 Mar 2025", pemilik: CONTRACT_ORG.pemilik, organisasi: CONTRACT_ORG.organisasi };
+  const preview = renderPreview(body, sample);
+
+  const insertToken = (token: string) => {
+    const area = document.getElementById("contract-template-body") as HTMLTextAreaElement | null;
+    const snippet = `{{${token}}}`;
+    if (!area) { setBody(current => current + snippet); return; }
+    const startPos = area.selectionStart; const endPos = area.selectionEnd;
+    setBody(current => `${current.slice(0, startPos)}${snippet}${current.slice(endPos)}`);
+    requestAnimationFrame(() => { area.focus(); const caret = startPos + snippet.length; area.setSelectionRange(caret, caret); });
+  };
+
+  return <>
+    <button className="button tenant-back" onClick={onBack}><ChevronLeft />{L("Kembali ke template", "Back to templates")}</button>
+    <div className="page-head"><div><h1>{template.nama ? v(template.nama) : L("Template baru", "New template")}</h1><p className="subtext">{L("Sisipkan placeholder agar data kontrak terisi otomatis.", "Insert placeholders so contract data fills automatically.")}</p></div>
+      <div className="actions">{onDelete && <button className="button danger" onClick={onDelete}><Trash2 />{L("Hapus", "Delete")}</button>}<button className="button primary" disabled={!nama.trim()} onClick={() => onSave({ ...template, nama: nama.trim(), body })}><Check />{t("Simpan")}</button></div>
+    </div>
+    <div className="template-editor-grid">
+      <section className="panel tenant-card">
+        <div className="form-field full"><label htmlFor="ctpl-name">{L("Nama template", "Template name")}</label><input id="ctpl-name" value={nama} onChange={e => setNama(e.target.value)} placeholder={L("mis. Kontrak Sewa Standar", "e.g. Standard Rental Contract")} /></div>
+        <div className="placeholder-chips"><span className="placeholder-chips-label">{L("Sisipkan placeholder", "Insert placeholder")}</span>{CONTRACT_PLACEHOLDERS.map(p => <button type="button" key={p.token} className="placeholder-chip" onClick={() => insertToken(p.token)}>{locale === "en" ? p.labelEn : p.label}</button>)}</div>
+        <div className="form-field full"><label htmlFor="contract-template-body">{L("Isi kontrak", "Contract body")}</label><textarea id="contract-template-body" className="contract-template-body" rows={18} value={body} onChange={e => setBody(e.target.value)} /></div>
+      </section>
+      <section className="panel contract-paper"><span className="preview-label">{L("Pratinjau", "Preview")}</span><article className="contract-document"><div className="contract-body">{preview}</div></article></section>
+    </div>
+  </>;
+}
+
+// ---- Documents module (file-explorer view) ----------------------------------
+
+function DocumentsPage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+  const { locale, t, v } = useI18n();
+  const { can } = useAccess();
+  const L = (id: string, en: string) => (locale === "en" ? en : id);
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const remove = (row: Row) => { setRows(old => old.filter(d => d.id !== row.id)); notify(message(locale, "removed", { item: t("dokumen") })); };
+
+  // Group by kategori; blank → "Lainnya / Other".
+  const folders = rows.reduce<Record<string, Row[]>>((acc, d) => {
+    const key = String(d.kategori || "");
+    (acc[key] ||= []).push(d);
+    return acc;
+  }, {});
+  const KATEGORI_ORDER = ["Kontrak", "Identitas", "Properti", "Lainnya"];
+  const folderKeys = Object.keys(folders).sort((a, b) => {
+    const ia = KATEGORI_ORDER.indexOf(a), ib = KATEGORI_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  const folderName = (key: string) => key || L("Lainnya", "Other");
+
+  const searching = search.trim().length > 0;
+  const matchesDoc = (d: Row) => [d.nama, d.kategori, d.terkait, d.diperbarui, d.status].some(val => v(val).toLowerCase().includes(search.toLowerCase()));
+  const searchHits = searching ? rows.filter(matchesDoc) : [];
+  const verifiedCount = rows.filter(d => String(d.status) === "Terverifikasi").length;
+  const privateCount = rows.filter(d => String(d.status) === "Privat").length;
+  const linkedCount = rows.filter(d => String(d.terkait || "").trim()).length;
+
+  const canEdit = can("documents", "edit");
+  const canDelete = can("documents", "delete");
+
+  const iconForCategory = (kategori: unknown) => {
+    const kat = String(kategori || "");
+    if (kat === "Kontrak") return <FileSignature />;
+    if (kat === "Identitas") return <IdCard />;
+    return <FileText />;
+  };
+  const docIcon = (d: Row) => iconForCategory(d.kategori);
+
+  const fileRow = (d: Row) => <div key={d.id} role="button" tabIndex={0}
+    className="file-row"
+    onClick={() => openDialog({ mode: "edit", page: "documents", row: d })}
+    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDialog({ mode: "edit", page: "documents", row: d }); } }}>
+    <span className="document-type">{docIcon(d)}</span>
+    <span className="file-row-text"><strong>{v(d.nama)}</strong><small>{d.terkait ? `${v(d.terkait)} · ` : ""}{v(d.diperbarui)}</small></span>
+    <Status>{d.status}</Status>
+    <span className="actions">
+      {canEdit && <button type="button" className="icon-button" aria-label={`${t("Edit")} ${v(d.nama)}`} onClick={e => { e.stopPropagation(); openDialog({ mode: "edit", page: "documents", row: d }); }}><Pencil /></button>}
+      {canDelete && <button type="button" className="icon-button" aria-label={`${t("Hapus")} ${v(d.nama)}`} onClick={e => { e.stopPropagation(); remove(d); }}><Trash2 /></button>}
+    </span>
+  </div>;
+
+  const openDocs = openFolder !== null ? (folders[openFolder] || []) : [];
+
+  return <>
+    <PageHead page="documents" action={can("documents", "create") ? () => openDialog({ mode: "create", page: "documents" }) : undefined} />
+    <section className="document-overview" aria-label={L("Ringkasan dokumen", "Document overview")}>
+      <div><span>{L("Total arsip", "Total archive")}</span><strong>{rows.length}</strong></div>
+      <div><span>{L("Terverifikasi", "Verified")}</span><strong>{verifiedCount}</strong></div>
+      <div><span>{L("Privat", "Private")}</span><strong>{privateCount}</strong></div>
+      <div><span>{L("Terhubung", "Linked")}</span><strong>{linkedCount}</strong></div>
+    </section>
+    {openFolder !== null
+      ? <section className="panel document-panel">
+          <div className="document-folder-head">
+            <button className="button tenant-back" onClick={() => setOpenFolder(null)}><ChevronLeft />{L("Semua dokumen", "All documents")}</button>
+            <div className="explorer-crumb"><span><FolderOpen /></span><strong>{v(folderName(openFolder))}</strong><span>{L(`${openDocs.length} dokumen`, `${openDocs.length} documents`)}</span></div>
+          </div>
+          <div className="file-list">{openDocs.map(fileRow)}</div>
+        </section>
+      : <section className="panel document-panel"><Toolbar search={search} setSearch={setSearch} />
+          {!rows.length
+            ? <div className="empty"><FileText /><div><strong>{L("Belum ada dokumen", "No documents yet")}</strong>{L("Unggah dokumen baru.", "Upload a new document.")}</div></div>
+            : searching
+              ? (searchHits.length ? <div className="file-list">{searchHits.map(fileRow)}</div> : <div className="empty"><Search /><div><strong>{L("Tidak ada dokumen yang cocok", "No matching documents")}</strong>{L("Ubah kata kunci pencarian.", "Try a different search term.")}</div></div>)
+              : <div className="explorer-grid">{folderKeys.map(key => <button type="button" key={key || "_other"} className="folder-card" onClick={() => setOpenFolder(key)}>
+                  <span className="folder-card-icon">{iconForCategory(key)}</span>
+                  <span className="folder-card-text"><strong>{v(folderName(key))}</strong><small>{L(`${folders[key].length} dokumen`, `${folders[key].length} documents`)}</small></span>
+                  <ChevronRight className="folder-card-chevron" />
+                </button>)}</div>}
+        </section>}
+  </>;
 }
 
 function Field({ label, value, full, type = "text", multiline, options, autoComplete }: { label: string; value: string; full?: boolean; type?: React.HTMLInputTypeAttribute; multiline?: boolean; options?: string[]; autoComplete?: string }) {
@@ -1354,7 +1844,11 @@ function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState
   const legacyContact = String(row?.kontak || "");
   const legacyPhone = legacyContact.match(/(?:\+?\d[\d\s-]{7,})$/)?.[0]?.trim() || "";
   const [name, setName] = useState(String(row?.nama || ""));
-  const [address, setAddress] = useState(String(row?.alamat || row?.lokasi || ""));
+  const fullAddress = String(row?.alamat || row?.lokasi || "");
+  const [addressStreet, setAddressStreet] = useState(String(row?.addressStreet || fullAddress));
+  const [addressCity, setAddressCity] = useState(String(row?.addressCity || ""));
+  const [addressProvince, setAddressProvince] = useState(String(row?.addressProvince || ""));
+  const [addressZip, setAddressZip] = useState(String(row?.addressZip || ""));
   const [contactName, setContactName] = useState(String(row?.contactName || legacyContact.replace(legacyPhone, "").replace(/[·,|-]+$/, "").trim()));
   const [contactPhone, setContactPhone] = useState(String(row?.contactPhone || legacyPhone));
   const [labels, setLabels] = useState<string[]>(initialLabels);
@@ -1404,12 +1898,16 @@ function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState
       id: row?.id || `properties-${Date.now()}`,
       nama: name,
       tipe: labels.join(", "),
-      lokasi: address,
+      lokasi: [addressStreet, addressCity].filter(Boolean).join(", "),
       unit: totalUnits,
       terisi: Math.min(Number(row?.terisi || 0), totalUnits),
       pendapatan: defaultPrice ? rupiah(defaultPrice) : String(row?.pendapatan || "Rp0"),
       status: String(row?.status || "Aktif"),
-      alamat: address,
+      alamat: [addressStreet, addressCity, addressProvince, addressZip].filter(Boolean).join(", "),
+      addressStreet,
+      addressCity,
+      addressProvince,
+      addressZip,
       kontak: `${contactName} · ${contactPhone}`,
       contactName,
       contactPhone,
@@ -1432,7 +1930,10 @@ function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState
     <div className="dialog-body property-form">
       <section className="form-section"><div className="form-section-head"><strong>{t("Informasi properti")}</strong><span>1</span></div><div className="form-grid">
         <div className="form-field full"><label htmlFor="property-name">{t("Nama properti")}</label><input id="property-name" autoComplete="organization" value={name} onChange={event => setName(event.target.value)} required /></div>
-        <div className="form-field full"><label htmlFor="property-address">{t("Alamat")}</label><textarea id="property-address" autoComplete="street-address" rows={4} value={address} onChange={event => setAddress(event.target.value)} required /></div>
+        <div className="form-field full"><label htmlFor="property-address">{t("Alamat")}</label><input id="property-address" autoComplete="street-address" value={addressStreet} onChange={event => setAddressStreet(event.target.value)} required placeholder={locale === "en" ? "Street address" : "Jalan, nomor, RT/RW"} /></div>
+        <div className="form-field"><label htmlFor="property-city">{locale === "en" ? "City" : "Kota"}</label><input id="property-city" autoComplete="address-level2" value={addressCity} onChange={event => setAddressCity(event.target.value)} required placeholder={locale === "en" ? "City" : "Kota"} /></div>
+        <div className="form-field"><label htmlFor="property-province">{locale === "en" ? "Province" : "Provinsi"}</label><input id="property-province" autoComplete="address-level1" value={addressProvince} onChange={event => setAddressProvince(event.target.value)} required placeholder={locale === "en" ? "Province" : "Provinsi"} /></div>
+        <div className="form-field"><label htmlFor="property-zip">{locale === "en" ? "Zip code" : "Kode pos"}</label><input id="property-zip" autoComplete="postal-code" inputMode="numeric" value={addressZip} onChange={event => setAddressZip(event.target.value)} required placeholder="12345" /></div>
         <fieldset className="form-field full contact-fieldset"><legend>{t("Penanggung jawab")}</legend><div className="contact-row"><div className="form-field"><label htmlFor="contact-name">{t("Nama penanggung jawab")}</label><input id="contact-name" autoComplete="name" value={contactName} onChange={event => setContactName(event.target.value)} required placeholder={t("Nama lengkap")} /></div><div className="form-field"><label htmlFor="contact-phone">{t("Nomor telepon")}</label><input id="contact-phone" type="tel" inputMode="tel" autoComplete="tel" pattern="[0-9+()\s-]{8,20}" value={contactPhone} onChange={event => setContactPhone(event.target.value)} required placeholder="08xx xxxx xxxx" /></div></div></fieldset>
         <div className="form-field full"><label htmlFor="property-label">{t("Label properti")}</label><div className="tag-input">{labels.map(label => <span className="property-tag" key={label}>{label}<button type="button" onClick={() => setLabels(current => current.filter(item => item !== label))} aria-label={`${t("Hapus")} ${label}`}><X /></button></span>)}<input id="property-label" value={labelInput} onChange={event => setLabelInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addLabel(); } }} onBlur={() => addLabel()} placeholder={labels.length ? "" : t("Ketik label lalu tekan Enter")} /></div><div className="tag-suggestions">{["Kosan", "Ruko", "Kontrakan", "Apartemen"].filter(item => !labels.includes(item)).map(item => <button type="button" key={item} onClick={() => addLabel(item)}>+ {t(item)}</button>)}</div></div>
       </div></section>
@@ -2232,6 +2733,7 @@ function SewainContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [booking, setBooking] = useState<BookingState | null>(null);
   const [focusReservationId, setFocusReservationId] = useState("");
+  const [focusContractId, setFocusContractId] = useState("");
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toast, setToast] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -2247,6 +2749,7 @@ function SewainContent() {
   const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
   const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
   const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
+  const [contractTemplates, setContractTemplates] = useStoredConfig<ContractTemplate[]>("contract-templates-v1", SEED_CONTRACT_TEMPLATES);
   const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
   const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
   const [documents, setDocuments] = useStoredRows("documents", moduleData.documents);
@@ -2325,7 +2828,7 @@ function SewainContent() {
       <div className="language-switcher"><span className="language-flag" aria-hidden="true">{locale === "id" ? "🇮🇩" : "🇬🇧"}</span><select id="locale" aria-label={t("Bahasa")} value={locale} onChange={event => setLocale(event.target.value as Locale)}><option value="id">Indonesia</option><option value="en">English</option></select></div>
       <div className="profile" title={sidebarCollapsed ? access.currentMember?.name : undefined}><span className="avatar">{initials(access.currentMember?.name || "?")}</span><div className="profile-copy"><strong>{access.currentMember?.name || "—"}</strong><span>{access.currentRole ? t(access.currentRole.name) : t("Tanpa peran")} · PT Makmur</span></div></div>
     </aside>
-    <div className="shell"><header className="topbar"><button className="icon-button menu-button" aria-label={t("Buka navigasi")} onClick={() => setMobileNav(true)}><PanelLeftOpen /></button><div className="global-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Pencarian global")} placeholder={t("Cari properti, penyewa, atau tagihan...")} /><span className="kbd">⌘K</span></div><div className="top-actions"><button className={`icon-button hide-mobile ${page === "calendar" ? "active" : ""}`} aria-label={t("Jadwal")} onClick={() => go("calendar")}><CalendarDays /></button>{access.members.length > 1 && <div className="acting-as-anchor" ref={actingAsRef}><button className={`icon-button acting-as-trigger ${actingAsOpen ? "active" : ""}`} aria-label={t("Lihat sebagai")} aria-haspopup="dialog" aria-expanded={actingAsOpen} onClick={() => setActingAsOpen(o => !o)} title={t("Lihat sebagai") + ": " + (access.currentMember?.name || "")}><span className="acting-as-avatar">{initials(access.currentMember?.name || "?")}</span></button>{actingAsOpen && <div className="acting-as-popover" role="dialog" aria-label={t("Lihat sebagai")}><p className="acting-as-label">{t("Lihat sebagai")}</p>{access.members.map(member => { const role = access.roles.find(r => r.id === member.roleId); return <button key={member.id} className={`acting-as-option ${member.id === access.currentUserId ? "active" : ""}`} onClick={() => { access.setCurrentUserId(member.id); setActingAsOpen(false); }}><span className="acting-as-opt-avatar">{initials(member.name)}</span><span className="acting-as-opt-copy"><strong>{member.name}</strong><span>{role ? t(role.name) : ""}</span></span>{member.id === access.currentUserId && <Check size={14} />}</button>; })}</div>}</div>}<div className="notification-anchor" ref={notificationsRef}><button className={`icon-button notification-trigger ${notificationsOpen ? "active" : ""}`} aria-label={locale === "en" ? "Notifications" : "Notifikasi"} aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(current => !current)}><Bell />{notificationItems.some(item => !readNotifications.includes(item.id)) && <span className="notification-dot" aria-hidden="true" />}</button>{notificationsOpen && <section className="notification-popover" role="dialog" aria-label={locale === "en" ? "Notifications" : "Notifikasi"}><div className="notification-head"><div><h2>{locale === "en" ? "Notifications" : "Notifikasi"}</h2><p>{locale === "en" ? "Your latest operational updates" : "Pembaruan operasional terbaru"}</p></div><button className="notification-read-all" onClick={() => rememberRead(notificationItems.map(item => item.id))}>{locale === "en" ? "Mark all read" : "Tandai dibaca"}</button></div><div className="notification-list">{notificationItems.map(item => { const unread = !readNotifications.includes(item.id); const Icon = item.kind === "payment" ? CircleDollarSign : item.kind === "reminder" ? CalendarClock : item.kind === "maintenance" ? MessageSquareText : FileType2; return <button className={`notification-item ${unread ? "unread" : ""}`} key={item.id} onClick={() => openNotification(item)}><span className={`notification-icon ${item.kind}`}><Icon /></span><span className="notification-copy"><span className="notification-title">{locale === "en" ? ({ payment: "Payment received", reminder: "Invoice due today", maintenance: "New complaint from WhatsApp bot", contract: "Contract awaiting signature" } as const)[item.kind] : item.title}</span><span className="notification-description">{item.description}</span><time>{item.time}</time></span>{unread && <span className="unread-dot" aria-label={locale === "en" ? "Unread" : "Belum dibaca"} />}</button>; })}</div><button className="notification-footer" onClick={() => { setNotificationsOpen(false); go("dashboard"); }}>{locale === "en" ? "Open activity overview" : "Buka ringkasan aktivitas"}<ChevronLeft /></button></section>}</div></div></header>
+    <div className="shell"><header className="topbar"><button className="collapse-button topbar-collapse" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")}><span className="collapse-icon-stack" aria-hidden="true"><span className={sidebarCollapsed ? "is-visible" : "is-hidden"}><PanelLeftOpen /></span><span className={sidebarCollapsed ? "is-hidden" : "is-visible"}><PanelLeftClose /></span></span></button><button className="icon-button menu-button" aria-label={t("Buka navigasi")} onClick={() => setMobileNav(true)}><PanelLeftOpen /></button><div className="global-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Pencarian global")} placeholder={t("Cari properti, penyewa, atau tagihan...")} /><span className="kbd">⌘K</span></div><div className="top-actions"><button className={`icon-button hide-mobile ${page === "calendar" ? "active" : ""}`} aria-label={t("Jadwal")} onClick={() => go("calendar")}><CalendarDays /></button>{access.members.length > 1 && <div className="acting-as-anchor" ref={actingAsRef}><button className={`icon-button acting-as-trigger ${actingAsOpen ? "active" : ""}`} aria-label={t("Lihat sebagai")} aria-haspopup="dialog" aria-expanded={actingAsOpen} onClick={() => setActingAsOpen(o => !o)} title={t("Lihat sebagai") + ": " + (access.currentMember?.name || "")}><span className="acting-as-avatar">{initials(access.currentMember?.name || "?")}</span></button>{actingAsOpen && <div className="acting-as-popover" role="dialog" aria-label={t("Lihat sebagai")}><p className="acting-as-label">{t("Lihat sebagai")}</p>{access.members.map(member => { const role = access.roles.find(r => r.id === member.roleId); return <button key={member.id} className={`acting-as-option ${member.id === access.currentUserId ? "active" : ""}`} onClick={() => { access.setCurrentUserId(member.id); setActingAsOpen(false); }}><span className="acting-as-opt-avatar">{initials(member.name)}</span><span className="acting-as-opt-copy"><strong>{member.name}</strong><span>{role ? t(role.name) : ""}</span></span>{member.id === access.currentUserId && <Check size={14} />}</button>; })}</div>}</div>}<div className="notification-anchor" ref={notificationsRef}><button className={`icon-button notification-trigger ${notificationsOpen ? "active" : ""}`} aria-label={locale === "en" ? "Notifications" : "Notifikasi"} aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(current => !current)}><Bell />{notificationItems.some(item => !readNotifications.includes(item.id)) && <span className="notification-dot" aria-hidden="true" />}</button>{notificationsOpen && <section className="notification-popover" role="dialog" aria-label={locale === "en" ? "Notifications" : "Notifikasi"}><div className="notification-head"><div><h2>{locale === "en" ? "Notifications" : "Notifikasi"}</h2><p>{locale === "en" ? "Your latest operational updates" : "Pembaruan operasional terbaru"}</p></div><button className="notification-read-all" onClick={() => rememberRead(notificationItems.map(item => item.id))}>{locale === "en" ? "Mark all read" : "Tandai dibaca"}</button></div><div className="notification-list">{notificationItems.map(item => { const unread = !readNotifications.includes(item.id); const Icon = item.kind === "payment" ? CircleDollarSign : item.kind === "reminder" ? CalendarClock : item.kind === "maintenance" ? MessageSquareText : FileType2; return <button className={`notification-item ${unread ? "unread" : ""}`} key={item.id} onClick={() => openNotification(item)}><span className={`notification-icon ${item.kind}`}><Icon /></span><span className="notification-copy"><span className="notification-title">{locale === "en" ? ({ payment: "Payment received", reminder: "Invoice due today", maintenance: "New complaint from WhatsApp bot", contract: "Contract awaiting signature" } as const)[item.kind] : item.title}</span><span className="notification-description">{item.description}</span><time>{item.time}</time></span>{unread && <span className="unread-dot" aria-label={locale === "en" ? "Unread" : "Belum dibaca"} />}</button>; })}</div><button className="notification-footer" onClick={() => { setNotificationsOpen(false); go("dashboard"); }}>{locale === "en" ? "Open activity overview" : "Buka ringkasan aktivitas"}<ChevronLeft /></button></section>}</div></div></header>
       <main className="main" id="main-content">
         {page === "dashboard" && <Dashboard go={go} reservations={reservations} />}
         {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} />}
@@ -2336,8 +2839,10 @@ function SewainContent() {
         {page === "tokens" && <TokenPage rows={tokens} setRows={setTokens} openDialog={setDialog} notify={notify} />}
         {page === "settings" && <SettingsPage notify={notify} integrationConfig={integrationConfig} setIntegrationConfig={setIntegrationConfig} />}
         {page === "messages" && <MessageTemplatesPage templates={templates} setTemplates={setTemplates} notify={notify} />}
-        {page === "reservations" && <ReservationsPage rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} properties={propertyRows} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} />}
-        {currentStore && !["properties", "tenants", "invoices", "tickets", "tokens", "messages", "reservations"].includes(page) && <CrudPage page={page} rows={currentStore[0]} setRows={currentStore[1]} openDialog={setDialog} notify={notify} />}
+        {page === "reservations" && <ReservationsPage rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} properties={propertyRows} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} onOpenContract={nomor => { setFocusContractId(nomor); go("contracts"); }} />}
+        {page === "contracts" && <ContractsPage contracts={contracts} setContracts={setContracts} templates={contractTemplates} setTemplates={setContractTemplates} reservations={reservations} setReservations={setReservations} tenants={tenants} notify={notify} focusId={focusContractId} onClearFocus={() => setFocusContractId("")} />}
+        {page === "documents" && <DocumentsPage rows={documents} setRows={setDocuments} openDialog={setDialog} notify={notify} />}
+        {currentStore && !["properties", "tenants", "invoices", "tickets", "tokens", "messages", "reservations", "contracts", "documents"].includes(page) && <CrudPage page={page} rows={currentStore[0]} setRows={currentStore[1]} openDialog={setDialog} notify={notify} />}
       </main>
     </div>
     {dialog && <EditDialog state={dialog} onClose={() => setDialog(null)} onSave={save} />}
