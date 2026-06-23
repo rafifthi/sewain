@@ -2,11 +2,7 @@
 
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-<<<<<<< HEAD
-  Bell, Bot, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, CircleDollarSign,
-=======
-  Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign,
->>>>>>> 0b1620d (Add calendar and role permission layouts)
+  Bell, Bot, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign,
   ClipboardList, CreditCard, FileText, FileType2, Gauge, Home, MessageSquareText,
   Bold, CalendarClock, CalendarPlus, Download, Eye, GripVertical, IdCard, ImagePlus, Italic, List, Mail, MapPin, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, PenLine, Phone, Plus, Search, Send, Settings, ShieldCheck, Tag, TicketCheck, Trash2,
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
@@ -1187,9 +1183,6 @@ function InvoicePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRo
       </aside></div></>;
 }
 
-<<<<<<< HEAD
-function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { notify: (s: string) => void; integrationConfig: IntegrationConfig; setIntegrationConfig: (config: IntegrationConfig) => void }) {
-=======
 const actionLabel: Record<PermissionAction, string> = { view: "Lihat", create: "Tambah", edit: "Ubah", delete: "Hapus" };
 const memberStatusLabel: Record<MemberStatus, string> = { active: "Aktif", invited: "Diundang", inactive: "Nonaktif" };
 
@@ -1309,8 +1302,7 @@ function RolesPanel({ notify }: { notify: (s: string) => void }) {
   </div>;
 }
 
-function SettingsPage({ notify }: { notify: (s: string) => void }) {
->>>>>>> 0b1620d (Add calendar and role permission layouts)
+function SettingsPage({ notify, integrationConfig, setIntegrationConfig }: { notify: (s: string) => void; integrationConfig: IntegrationConfig; setIntegrationConfig: (config: IntegrationConfig) => void }) {
   const { locale, t, v } = useI18n();
   const { config: tokenConfig, setConfig: setTokenConfig } = useTokenConfig();
   const [tab, setTab] = useState("Organisasi");
@@ -1320,7 +1312,6 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
     if (n > 0 && !tokenConfig.nominals.includes(n)) setTokenConfig({ ...tokenConfig, nominals: [...tokenConfig.nominals, n] });
     setNominalInput("");
   };
-<<<<<<< HEAD
   const testTelegram = async () => {
     try {
       const response = await fetch(`${integrationConfig.botUrl}/api/health`);
@@ -1330,11 +1321,8 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
       notify(locale === "en" ? "Telegram bot connection failed." : "Koneksi Telegram bot gagal.");
     }
   };
-  return <><PageHead page="settings" /><section className="panel"><div className="tabs">{["Organisasi", "Penagihan", "Token PLN", "Integrasi", "Pengguna"].map(item => <button key={item} onClick={() => setTab(item)} className={`tab ${tab === item ? "active" : ""}`}>{t(item)}</button>)}</div><div className="dialog-body" style={{ maxWidth: 720 }}>
-=======
   const configTab = ["Organisasi", "Penagihan", "Token PLN", "Integrasi"].includes(tab);
   return <><PageHead page="settings" /><section className="panel"><div className="tabs">{["Organisasi", "Penagihan", "Token PLN", "Integrasi", "Pengguna", "Peran"].map(item => <button key={item} onClick={() => setTab(item)} className={`tab ${tab === item ? "active" : ""}`}>{t(item)}</button>)}</div><div className="dialog-body" style={{ maxWidth: configTab ? 720 : "100%" }}>
->>>>>>> 0b1620d (Add calendar and role permission layouts)
     {tab === "Organisasi" && <div className="form-grid"><Field label="Nama organisasi" value="PT Makmur Sejahtera" autoComplete="organization" /><Field label="Zona waktu" value="Asia/Jakarta" options={["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"]} /><Field full multiline label="Alamat" value="Jl. Melati No. 45, Depok, Jawa Barat" autoComplete="street-address" /></div>}
     {tab === "Penagihan" && <div className="form-grid"><Field label="Tanggal pembuatan tagihan" value="1" type="number" /><Field label="Jatuh tempo standar" value="Tanggal 5" options={["Tanggal 1", "Tanggal 5", "Tanggal 10", "Tanggal 15"]} /><Field label="Pengingat pertama" value="3 hari sebelum" options={["1 hari sebelum", "3 hari sebelum", "7 hari sebelum"]} /><Field label="Pengingat terlambat" value="Setiap 3 hari" options={["Setiap hari", "Setiap 3 hari", "Setiap 7 hari"]} /></div>}
     {tab === "Token PLN" && <div className="form-grid">
@@ -1352,16 +1340,10 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
         <p className="subtext">{locale === "en" ? "Manage the global platform fee from the Token PLN page using the \"Manage fee\" button." : "Kelola biaya platform global dari halaman Token PLN menggunakan tombol \"Kelola biaya\"."}</p>
       </div>
     </div>}
-<<<<<<< HEAD
     {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><Bot /></span><span><strong>Telegram Bot @theDaedalus_bot</strong><span className="cell-sub">Kirim notifikasi ke penyewa via Telegram</span></span><span className={`badge ${integrationConfig.apiKey ? "success" : ""}`}>{integrationConfig.apiKey ? "Terhubung" : "Belum terkonfigurasi"}</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="telegram-bot-url">Bot API URL</label><input id="telegram-bot-url" type="text" value={integrationConfig.botUrl} onChange={event => setIntegrationConfig({ ...integrationConfig, botUrl: event.target.value })} /></div><div className="form-field full"><label htmlFor="telegram-api-key">API Key</label><input id="telegram-api-key" type="password" value={integrationConfig.apiKey} onChange={event => setIntegrationConfig({ ...integrationConfig, apiKey: event.target.value })} /></div></div><div className="actions" style={{ marginTop: 12, marginBottom: 16 }}><button type="button" className="button" onClick={testTelegram}>Uji Koneksi</button></div><hr /><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>{locale === "en" ? "PPOB (utility payments)" : "PPOB"} · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Token PLN tidak diterbitkan secara nyata")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "PPOB test succeeded." : "Tes PPOB berhasil.")}>{t("Tes")}</button></div></div>}
-    {tab === "Pengguna" && <div><div className="activity"><span className="avatar">AT</span><span><strong>Andi Triono</strong><span className="cell-sub">andi@sewain.id · {t("Pemilik")}</span></span><Status>Aktif</Status></div><div className="activity"><span className="avatar">RN</span><span><strong>Rina Novita</strong><span className="cell-sub">rina@sewain.id · {t("Admin")}</span></span><Status>Aktif</Status></div></div>}
-    <div className="actions" style={{ marginTop: 20 }}><button className="button primary" onClick={() => notify(message(locale, "settings", { section: t(tab) }))}>{t("Simpan perubahan")}</button></div>
-=======
-    {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>{locale === "en" ? "PPOB (utility payments)" : "PPOB"} · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Token PLN tidak diterbitkan secara nyata")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "PPOB test succeeded." : "Tes PPOB berhasil.")}>{t("Tes")}</button></div></div>}
     {tab === "Pengguna" && <MembersPanel notify={notify} />}
     {tab === "Peran" && <RolesPanel notify={notify} />}
     {configTab && <div className="actions" style={{ marginTop: 20 }}><button className="button primary" onClick={() => notify(message(locale, "settings", { section: t(tab) }))}>{t("Simpan perubahan")}</button></div>}
->>>>>>> 0b1620d (Add calendar and role permission layouts)
   </div></section></>;
 }
 
@@ -2264,12 +2246,8 @@ function SewainContent() {
   const [reservations, setReservations] = useStoredRows("reservations", moduleData.reservations);
   const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
   const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
-<<<<<<< HEAD
-  const [templates, setTemplates] = useStoredConfig<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
-  const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
-=======
   const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
->>>>>>> 0b1620d (Add calendar and role permission layouts)
+  const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
   const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
   const [documents, setDocuments] = useStoredRows("documents", moduleData.documents);
   const [units, setUnits] = useStoredRows("units", seedUnits);
@@ -2342,7 +2320,7 @@ function SewainContent() {
   return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><AccessContext.Provider value={access}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
     {mobileNav && <button className="mobile-overlay" aria-label={t("Tutup navigasi")} onClick={() => setMobileNav(false)} />}
     <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-      <div className="brand"><span className="brand-mark"><img src="/logo.svg" alt="Sewain" width={24} height={24} style={{borderRadius: 6}} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")}><span className="collapse-icon-stack" aria-hidden="true"><span className={sidebarCollapsed ? "is-visible" : "is-hidden"}><PanelLeftOpen /></span><span className={sidebarCollapsed ? "is-hidden" : "is-visible"}><PanelLeftClose /></span></span></button></div>
+      <div className="brand"><span className="brand-mark"><img src="/logo.svg" alt="Sewain" width={24} height={24} style={{borderRadius: 6}} /></span><span className="brand-name">Sewain</span><button className="collapse-button" onClick={toggleSidebar} aria-label={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-pressed={sidebarCollapsed} title={t(sidebarCollapsed ? "Perluas sidebar" : "Ciutkan sidebar")} aria-hidden="true">{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</button></div>
       <nav className="nav" aria-label={t("Navigasi utama")}><div className="nav-label">{t("Operasional")}</div>{nav.slice(0, 10).filter(item => navAllowed(item.id)).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}<div className="nav-label">Workspace</div>{nav.slice(10).filter(item => navAllowed(item.id)).map(item => <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => go(item.id as PageId)} aria-label={t(item.label)} title={sidebarCollapsed ? t(item.label) : undefined}><item.icon /><span className="nav-item-label">{t(item.label)}</span></button>)}</nav>
       <div className="language-switcher"><span className="language-flag" aria-hidden="true">{locale === "id" ? "🇮🇩" : "🇬🇧"}</span><select id="locale" aria-label={t("Bahasa")} value={locale} onChange={event => setLocale(event.target.value as Locale)}><option value="id">Indonesia</option><option value="en">English</option></select></div>
       <div className="profile" title={sidebarCollapsed ? access.currentMember?.name : undefined}><span className="avatar">{initials(access.currentMember?.name || "?")}</span><div className="profile-copy"><strong>{access.currentMember?.name || "—"}</strong><span>{access.currentRole ? t(access.currentRole.name) : t("Tanpa peran")} · PT Makmur</span></div></div>
