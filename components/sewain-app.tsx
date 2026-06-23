@@ -289,6 +289,20 @@ function Status({ children }: { children: React.ReactNode }) {
   return <span className={`badge ${state} ${slug(value)}`}>{v(value)}</span>;
 }
 
+function unitStatusTone(status: unknown) {
+  const value = String(status);
+  if (/dihuni/i.test(value)) return "occupied";
+  if (/dipesan|booking/i.test(value)) return "reserved";
+  if (/kosong|akan kosong/i.test(value)) return "vacant";
+  return "";
+}
+
+function unitGroupLabel(group: string, t: (value: string) => string, v: (value: unknown) => string) {
+  const value = group.trim();
+  if (!value) return t("Tanpa group");
+  return /^\d+$/.test(value) ? `${t("Lantai")} ${v(value)}` : v(value);
+}
+
 function PageHead({ page, action, back }: { page: PageId; action?: () => void; back?: () => void }) {
   const { t } = useI18n();
   const { can } = useAccess();
@@ -744,12 +758,36 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
   const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
   const propertyUnits = unitsForProperty(units, property);
   const [unitSearch, setUnitSearch] = useState("");
+  const [unitStatusFilter, setUnitStatusFilter] = useState("Semua");
+  const [collapsedFloors, setCollapsedFloors] = useState<string[]>([]);
   const [unitDrawer, setUnitDrawer] = useState<Row | null>(null);
   const [showMore, setShowMore] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [addUnit, setAddUnit] = useState(false);
-  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "" });
-  const filteredUnits = propertyUnits.filter(row => Object.values(row).some(value => v(value).toLowerCase().includes(unitSearch.toLowerCase())));
+  const storedGroups = String(property.unitGroups || "").split("|").map(group => group.trim()).filter(Boolean);
+  const resolvedGroups = Array.from(new Set([...storedGroups, ...propertyUnits.map(row => String(row.lantai || "1").trim()).filter(Boolean)]));
+  const unitGroupNames = (resolvedGroups.length ? resolvedGroups : ["1"])
+    .sort((a, b) => unitGroupLabel(a, t, v).localeCompare(unitGroupLabel(b, t, v), locale === "en" ? "en" : "id", { numeric: true }));
+  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: unitGroupNames[0] || "1", sewa: "", deposit: "" });
+  const statusFilters = [
+    { id: "Semua", label: locale === "en" ? "All" : "Semua", count: propertyUnits.length },
+    { id: "Dihuni", label: locale === "en" ? "Occupied" : "Dihuni", count: propertyUnits.filter(row => /dihuni/i.test(String(row.status))).length },
+    { id: "Kosong", label: locale === "en" ? "Vacant" : "Kosong", count: propertyUnits.filter(row => /kosong|akan kosong/i.test(String(row.status))).length },
+    { id: "Dipesan", label: locale === "en" ? "Reserved" : "Dipesan", count: propertyUnits.filter(row => /dipesan|booking/i.test(String(row.status))).length },
+  ];
+  const filteredUnits = propertyUnits.filter(row => {
+    const matchesSearch = [row.unit, row.tipe, row.lantai, row.penyewa, row.status, row.sewa].some(value => v(value).toLowerCase().includes(unitSearch.toLowerCase()));
+    const status = String(row.status);
+    const matchesStatus = unitStatusFilter === "Semua" ||
+      (unitStatusFilter === "Kosong" ? /kosong|akan kosong/i.test(status) : unitStatusFilter === "Dipesan" ? /dipesan|booking/i.test(status) : new RegExp(unitStatusFilter, "i").test(status));
+    return matchesSearch && matchesStatus;
+  });
+  const unitGroups = unitGroupNames.map(group => {
+    const groupUnits = filteredUnits.filter(row => String(row.lantai || "1").trim() === group);
+    const groupMatchesSearch = unitGroupLabel(group, t, v).toLowerCase().includes(unitSearch.toLowerCase());
+    const shouldShow = groupUnits.length > 0 || (unitStatusFilter === "Semua" && (!unitSearch || groupMatchesSearch));
+    return shouldShow ? [group, groupUnits] as const : null;
+  }).filter((group): group is readonly [string, Row[]] => Boolean(group));
   const total = propertyUnits.length || Number(property.unit || 0);
   const occupied = propertyUnits.filter(row => /dihuni/i.test(String(row.status))).length;
   const vacant = propertyUnits.filter(isVacant).length;
@@ -773,15 +811,61 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
     notify(locale === "en" ? "Property deleted." : "Properti dihapus.");
     onBack();
   };
+  const savePropertyGroups = (groups: string[]) => {
+    const normalized = Array.from(new Set(groups.map(group => group.trim()).filter(Boolean)));
+    setProperties(old => old.map(p => p.id === property.id ? { ...p, unitGroups: normalized.join("|") } : p));
+  };
+  const handleAddGroup = () => {
+    const name = window.prompt(locale === "en" ? "New group name" : "Nama group baru", locale === "en" ? "Floor 2" : "Lantai 2")?.trim();
+    if (!name) return;
+    if (unitGroupNames.some(group => group.toLowerCase() === name.toLowerCase() || unitGroupLabel(group, t, v).toLowerCase() === name.toLowerCase())) {
+      notify(locale === "en" ? "Group already exists." : "Group sudah ada.");
+      return;
+    }
+    savePropertyGroups([...unitGroupNames, name]);
+    setCollapsedFloors(current => current.filter(group => group !== name));
+    setUnitForm(form => ({ ...form, lantai: name }));
+    notify(locale === "en" ? "Unit group added." : "Group unit ditambahkan.");
+  };
+  const handleRenameGroup = (group: string) => {
+    const currentLabel = unitGroupLabel(group, t, v);
+    const name = window.prompt(locale === "en" ? "Rename group" : "Ubah nama group", currentLabel)?.trim();
+    if (!name || name === group || name === currentLabel) return;
+    if (unitGroupNames.some(item => item !== group && (item.toLowerCase() === name.toLowerCase() || unitGroupLabel(item, t, v).toLowerCase() === name.toLowerCase()))) {
+      notify(locale === "en" ? "Group already exists." : "Group sudah ada.");
+      return;
+    }
+    setUnits(old => old.map(row => row._propertiId === property.id && String(row.lantai || "1").trim() === group ? { ...row, lantai: name } : row));
+    savePropertyGroups(unitGroupNames.map(item => item === group ? name : item));
+    setCollapsedFloors(current => current.map(item => item === group ? name : item));
+    setUnitForm(form => ({ ...form, lantai: form.lantai === group ? name : form.lantai }));
+    notify(locale === "en" ? "Unit group renamed." : "Group unit diubah.");
+  };
+  const handleDeleteGroup = (group: string, groupUnits: Row[]) => {
+    const label = unitGroupLabel(group, t, v);
+    const messageText = groupUnits.length
+      ? (locale === "en" ? `Delete ${label} and ${groupUnits.length} units inside it?` : `Hapus ${label} dan ${groupUnits.length} unit di dalamnya?`)
+      : (locale === "en" ? `Delete ${label}?` : `Hapus ${label}?`);
+    if (!window.confirm(messageText)) return;
+    const deletedIds = new Set(groupUnits.map(row => row.id));
+    setUnits(old => old.filter(row => !deletedIds.has(row.id)));
+    const nextGroups = unitGroupNames.filter(item => item !== group);
+    const nextUnitCount = Math.max(0, Number(property.unit || 0) - groupUnits.length);
+    const deletedOccupied = groupUnits.filter(row => /dihuni/i.test(String(row.status))).length;
+    setProperties(old => old.map(p => p.id === property.id ? { ...p, unit: nextUnitCount, terisi: Math.max(0, Number(p.terisi || 0) - deletedOccupied), unitGroups: nextGroups.join("|") } : p));
+    setCollapsedFloors(current => current.filter(item => item !== group));
+    setUnitForm(form => ({ ...form, lantai: nextGroups[0] || "1" }));
+    notify(locale === "en" ? "Unit group deleted." : "Group unit dihapus.");
+  };
   const handleAddUnit = (e: React.FormEvent) => {
     e.preventDefault();
     const newUnit: Row = { id: `unit-${Date.now()}`, unit: unitForm.unit, tipe: unitForm.tipe, lantai: unitForm.lantai, penyewa: "Belum ada", status: "Kosong", sewa: unitForm.sewa ? formatRp(rupiah(unitForm.sewa)) : "Rp0", deposit: unitForm.deposit ? formatRp(rupiah(unitForm.deposit)) : "Rp0", tunggakan: "Rp0", meter: "-", _propertiId: property.id };
     const nextUnits = [...units, newUnit];
     setUnits(nextUnits);
-    setProperties(old => old.map(p => p.id === property.id ? { ...p, unit: Number(p.unit || 1) + 1 } : p));
+    setProperties(old => old.map(p => p.id === property.id ? { ...p, unit: Number(p.unit || 1) + 1, unitGroups: Array.from(new Set([...unitGroupNames, unitForm.lantai].filter(Boolean))).join("|") } : p));
     notify(locale === "en" ? "Unit added." : "Unit berhasil ditambahkan.");
     setAddUnit(false);
-    setUnitForm({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "" });
+    setUnitForm({ unit: "", tipe: "Standar", lantai: unitForm.lantai, sewa: "", deposit: "" });
   };
 
   const singleUnitView = primaryUnit ? <section className="single-unit-panel">
@@ -827,9 +911,45 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
       </div>
       {activeTab === "units" && singleUnitView}
       {activeTab === "units" && <div className="property-unit-list">
-        {!singleUnit && <div className="unit-list-head"><button className="button" onClick={() => setAddUnit(true)}><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div>}
-        <Toolbar search={unitSearch} setSearch={setUnitSearch} />
-        {filteredUnits.length ? <DataTable rows={filteredUnits} onSelect={row => setUnitDrawer(row)} onEdit={row => { isVacant(row) ? onBook({ propertyId: property.id, unitId: row.id }) : notify(locale === "en" ? "This unit is occupied. Use the lease to manage its tenant." : "Unit ini terisi. Kelola penyewanya melalui sewa."); }} onDelete={row => { setUnits(old => old.filter(r => r.id !== row.id)); notify(message(locale, "unitRemoved", { unit: row.unit })); }} /> : <div className="empty"><Building2 /><div><strong>{unitSearch ? t("Belum ada data yang cocok") : t("Belum ada unit")}</strong><span>{unitSearch ? t("Ubah pencarian atau filter untuk melihat properti lain.") : t("Tambahkan unit pada properti ini untuk mulai membuat pemesanan.")}</span></div></div>}
+        {!singleUnit && <div className="unit-board-toolbar">
+          <div className="field-inline unit-search"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari unit")} value={unitSearch} onChange={event => setUnitSearch(event.target.value)} placeholder={locale === "en" ? "Search units..." : "Cari unit..."} /></div>
+          <div className="unit-status-filters" aria-label={locale === "en" ? "Unit status filters" : "Filter status unit"}>
+            {statusFilters.map(filter => <button type="button" key={filter.id} className={unitStatusFilter === filter.id ? "active" : ""} onClick={() => setUnitStatusFilter(filter.id)}>{filter.label} ({filter.count})</button>)}
+          </div>
+          <div className="unit-board-actions"><button className="button unit-add-button" onClick={handleAddGroup}><FolderOpen />{locale === "en" ? "Add group" : "Tambah group"}</button><button className="button primary unit-add-button" onClick={() => setAddUnit(true)}><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div>
+        </div>}
+        {unitGroups.length ? <div className="unit-group-stack">
+          {unitGroups.map(([groupName, groupUnits]) => {
+            const collapsed = collapsedFloors.includes(groupName);
+            const allGroupUnits = propertyUnits.filter(row => String(row.lantai || "1").trim() === groupName);
+            const groupOccupied = allGroupUnits.filter(row => /dihuni/i.test(String(row.status))).length;
+            return <section className="unit-group" key={groupName}>
+              <div className="unit-group-head">
+                <button type="button" className="unit-group-toggle" aria-expanded={!collapsed} onClick={() => setCollapsedFloors(current => current.includes(groupName) ? current.filter(item => item !== groupName) : [...current, groupName])}>
+                  <span><strong>{unitGroupLabel(groupName, t, v)}</strong><small>{allGroupUnits.length} {t("unit")} <span>|</span> {groupOccupied} {locale === "en" ? "Occupied" : "Dihuni"}</small></span>
+                  <ChevronRight className={collapsed ? "" : "expanded"} />
+                </button>
+                <div className="unit-group-actions">
+                  <button type="button" className="unit-group-icon-button" aria-label={`${t("Edit")} ${unitGroupLabel(groupName, t, v)}`} onClick={() => handleRenameGroup(groupName)}><Pencil /></button>
+                  <button type="button" className="unit-group-icon-button danger" aria-label={`${t("Hapus")} ${unitGroupLabel(groupName, t, v)}`} onClick={() => handleDeleteGroup(groupName, allGroupUnits)}><Trash2 /></button>
+                </div>
+              </div>
+              {!collapsed && (groupUnits.length ? <div className="unit-card-grid">
+                {groupUnits.map(row => {
+                  const vacantUnit = isVacant(row);
+                  const tenantName = String(row.penyewa || "").trim();
+                  return <button type="button" className="unit-card" key={row.id} onClick={() => setUnitDrawer(row)} aria-label={`${t("Detail unit")} ${v(row.unit)}`}>
+                    <span className={`unit-card-status ${unitStatusTone(row.status)}`}><span />{v(row.status)}</span>
+                    <strong className="unit-card-number">{v(row.unit)}</strong>
+                    <span className="unit-card-tenant">{vacantUnit ? (locale === "en" ? "Available" : "Tersedia") : v(tenantName || row.status)}</span>
+                    {row.tipe && <span className="unit-card-meta">{v(row.tipe)}</span>}
+                    <span className="unit-card-price">{v(row.sewa || "Rp0")}<small>/{t("bulan")}</small></span>
+                  </button>;
+                })}
+              </div> : <div className="unit-group-empty"><Building2 /><span>{locale === "en" ? "No units in this group yet." : "Belum ada unit di group ini."}</span><button type="button" className="text-button" onClick={() => { setUnitForm(form => ({ ...form, lantai: groupName })); setAddUnit(true); }}>{locale === "en" ? "Add unit here" : "Tambah unit di sini"}</button></div>)}
+            </section>;
+          })}
+        </div> : <div className="empty"><Building2 /><div><strong>{unitSearch ? t("Belum ada data yang cocok") : t("Belum ada unit")}</strong><span>{unitSearch ? t("Ubah pencarian atau filter untuk melihat properti lain.") : t("Tambahkan unit pada properti ini untuk mulai membuat pemesanan.")}</span></div></div>}
       </div>}
       {activeTab === "invoices" && (propertyInvoices.length ? <div className="table-wrap"><table><thead><tr><th>ID</th><th>{t("Penyewa")}</th><th>Unit</th><th>{t("Periode")}</th><th>{t("Jatuh tempo")}</th><th>Total</th><th>Sisa</th><th>Status</th></tr></thead><tbody>{propertyInvoices.map(inv => <tr key={inv.id}><td><span className="ticket-id">{inv.id}</span></td><td>{v(inv.penyewa)}</td><td>{v(inv.unit)}</td><td>{v(inv.periode)}</td><td>{v(inv.jatuhTempo)}</td><td>{v(inv.total)}</td><td className={inv.sisa !== "Rp0" ? "money-danger" : ""}>{v(inv.sisa)}</td><td><Status>{inv.status}</Status></td></tr>)}</tbody></table></div> : <div className="empty"><CreditCard /><div><strong>{locale === "en" ? "No invoices" : "Belum ada tagihan"}</strong><span>{locale === "en" ? "Invoices for units in this property appear here." : "Tagihan unit properti ini akan muncul di sini."}</span></div></div>)}
       {activeTab === "tickets" && (propertyTickets.length ? <div className="table-wrap"><table><thead><tr><th>Tiket</th><th>Judul</th><th>Unit</th><th>{t("Penyewa")}</th><th>Vendor</th><th>Status</th></tr></thead><tbody>{propertyTickets.map(tkt => <tr key={tkt.id}><td><span className="ticket-id">{v(tkt.tiket)}</span></td><td>{v(tkt.judul)}</td><td>{v(tkt.unit)}</td><td>{v(tkt.penyewa)}</td><td>{v(tkt.vendor)}</td><td><Status>{tkt.status}</Status></td></tr>)}</tbody></table></div> : <div className="empty"><Wrench /><div><strong>{locale === "en" ? "No tickets" : "Belum ada tiket"}</strong><span>{locale === "en" ? "Maintenance tickets for this property appear here." : "Tiket pemeliharaan properti ini akan muncul di sini."}</span></div></div>)}
@@ -854,7 +974,7 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
     {showDeleteConfirm && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setShowDeleteConfirm(false)}><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-property-title"><div className="dialog-head"><div><h2 id="delete-property-title">{locale === "en" ? "Delete property?" : "Hapus properti?"}</h2><p>{locale === "en" ? `This will permanently remove "${v(property.nama)}" and cannot be undone.` : `Tindakan ini akan menghapus "${v(property.nama)}" secara permanen dan tidak dapat dibatalkan.`}</p></div><button className="icon-button" aria-label={t("Tutup")} onClick={() => setShowDeleteConfirm(false)}><X /></button></div><div className="dialog-actions"><button className="button" onClick={() => setShowDeleteConfirm(false)}>{t("Batal")}</button><button className="button danger" onClick={handleDeleteProperty}><Trash2 />{locale === "en" ? "Delete" : "Hapus"}</button></div></div></div>}
 
     {/* Add unit dialog */}
-    {addUnit && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setAddUnit(false)}><form className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-unit-title" onSubmit={handleAddUnit}><div className="dialog-head"><div><h2 id="add-unit-title">{locale === "en" ? "Add unit" : "Tambah unit"}</h2><p>{locale === "en" ? "Add a new unit to this property." : "Tambahkan unit baru ke properti ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={() => setAddUnit(false)}><X /></button></div><div className="dialog-body"><div className="form-grid"><div className="form-field"><label htmlFor="au-unit">{locale === "en" ? "Unit name / number" : "Nama / nomor unit"}</label><input id="au-unit" value={unitForm.unit} onChange={e => setUnitForm(f => ({ ...f, unit: e.target.value }))} required /></div><div className="form-field"><label htmlFor="au-tipe">{locale === "en" ? "Type" : "Tipe"}</label><select id="au-tipe" value={unitForm.tipe} onChange={e => setUnitForm(f => ({ ...f, tipe: e.target.value }))}>{["Standar", "Deluxe", "Premium", "Studio"].map(o => <option key={o}>{o}</option>)}</select></div><div className="form-field"><label htmlFor="au-lantai">{locale === "en" ? "Floor" : "Lantai"}</label><input id="au-lantai" value={unitForm.lantai} onChange={e => setUnitForm(f => ({ ...f, lantai: e.target.value }))} /></div><div className="form-field"><label htmlFor="au-sewa">{t("Sewa per bulan")}</label><div className="money-input"><span>Rp</span><input id="au-sewa" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.sewa} onChange={e => setUnitForm(f => ({ ...f, sewa: e.target.value }))} /></div></div><div className="form-field">  <label htmlFor="au-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="au-deposit" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.deposit} onChange={e => setUnitForm(f => ({ ...f, deposit: e.target.value }))} /></div></div></div></div><div className="dialog-actions"><button type="button" className="button" onClick={() => setAddUnit(false)}>{t("Batal")}</button><button type="submit" className="button primary"><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div></form></div>}
+    {addUnit && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setAddUnit(false)}><form className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-unit-title" onSubmit={handleAddUnit}><div className="dialog-head"><div><h2 id="add-unit-title">{locale === "en" ? "Add unit" : "Tambah unit"}</h2><p>{locale === "en" ? "Add a new unit to this property." : "Tambahkan unit baru ke properti ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={() => setAddUnit(false)}><X /></button></div><div className="dialog-body"><div className="form-grid"><div className="form-field"><label htmlFor="au-unit">{locale === "en" ? "Unit name / number" : "Nama / nomor unit"}</label><input id="au-unit" value={unitForm.unit} onChange={e => setUnitForm(f => ({ ...f, unit: e.target.value }))} required /></div><div className="form-field"><label htmlFor="au-tipe">{locale === "en" ? "Type" : "Tipe"}</label><select id="au-tipe" value={unitForm.tipe} onChange={e => setUnitForm(f => ({ ...f, tipe: e.target.value }))}>{["Standar", "Deluxe", "Premium", "Studio"].map(o => <option key={o}>{o}</option>)}</select></div><div className="form-field"><label htmlFor="au-lantai">{locale === "en" ? "Group" : "Group"}</label><select id="au-lantai" value={unitForm.lantai} onChange={e => setUnitForm(f => ({ ...f, lantai: e.target.value }))}>{unitGroupNames.map(group => <option key={group} value={group}>{unitGroupLabel(group, t, v)}</option>)}</select></div><div className="form-field"><label htmlFor="au-sewa">{t("Sewa per bulan")}</label><div className="money-input"><span>Rp</span><input id="au-sewa" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.sewa} onChange={e => setUnitForm(f => ({ ...f, sewa: e.target.value }))} /></div></div><div className="form-field">  <label htmlFor="au-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="au-deposit" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.deposit} onChange={e => setUnitForm(f => ({ ...f, deposit: e.target.value }))} /></div></div></div></div><div className="dialog-actions"><button type="button" className="button" onClick={() => setAddUnit(false)}>{t("Batal")}</button><button type="submit" className="button primary"><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div></form></div>}
   </>;
 }
 
