@@ -7,6 +7,9 @@ node_modules/
 .env*
 !.env.example
 
+# Local data
+.data/
+
 # OS and editor files
 .DS_Store
 *.log
