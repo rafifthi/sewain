@@ -18,6 +18,10 @@ import {
   Status, Toolbar, DataTable, fmtShort, rupiah, parseInput, toDateInputValue, whatsappUrl, statusRank,
   upsertRow, bodySnippet,
 } from "@/components/sewain-app";
+import {
+  getDepositStatus, setDepositStatus, getDeductions, addDeduction, removeDeduction,
+  formatDepositStatus, type DepositStatus, type DeductionEntry,
+} from "@/lib/deposit";
 
 type ContractsPageProps = {
   contracts: Row[]; setContracts: React.Dispatch<React.SetStateAction<Row[]>>;
@@ -76,6 +80,22 @@ function ContractDetail({ contract, setContracts, templates, reservations, setRe
   const openSign = (party: "tenant" | "owner") => { setPreviewOpen(false); setSignParty(party); };
 
   const editable = String(contract.status) !== "Ditandatangani";
+  const [depositStatus, setLocalDepositStatus] = useState<DepositStatus>(getDepositStatus(contract.id));
+  const [deductions, setLocalDeductions] = useState<DeductionEntry[]>(getDeductions(contract.id));
+  const [showDeductionForm, setShowDeductionForm] = useState(false);
+  const [deductionAmount, setDeductionAmount] = useState("");
+  const [deductionReason, setDeductionReason] = useState("");
+  const refreshDeposit = () => { setLocalDepositStatus(getDepositStatus(contract.id)); setLocalDeductions(getDeductions(contract.id)); };
+  const handleDepositStatus = (status: DepositStatus) => { setDepositStatus(contract.id, status, rupiah(contract.deposit)); refreshDeposit(); notify(L(`Deposit status diubah ke ${formatDepositStatus(status)}`, `Deposit status changed to ${formatDepositStatus(status)}`)); };
+  const handleAddDeduction = () => {
+    if (!deductionAmount || !deductionReason) return;
+    const amount = rupiah(deductionAmount);
+    if (!amount) return;
+    addDeduction(contract.id, { amount, reason: deductionReason, date: fmtShort(new Date()) });
+    refreshDeposit();
+    setShowDeductionForm(false);
+    notify(L("Pemotongan deposit dicatat.", "Deposit deduction recorded."));
+  };
   const [form, setForm] = useState({
     templateId: String(contract.templateId || DEFAULT_CONTRACT_TEMPLATE_ID),
     penyewa: String(contract.penyewa || ""), kontak: String(contract.kontak || ""),
@@ -171,6 +191,56 @@ function ContractDetail({ contract, setContracts, templates, reservations, setRe
         <div className="form-field"><label htmlFor="cd-masuk">{t("Jadwal masuk")}</label><input id="cd-masuk" type="date" value={form.jadwalMasuk} onChange={e => setField("jadwalMasuk", e.target.value)} /></div>
       </div>
     </section>}
+
+    {/* Deposit Management */}
+    <section className="panel tenant-card no-print">
+      <div className="tenant-card-head"><div className="card-head-title"><span className="section-icon"><WalletCards /></span><h2>{L("Deposit (Jaminan)", "Security Deposit")}</h2></div>
+        <Status>{formatDepositStatus(depositStatus)}</Status>
+      </div>
+      <div className="detail-grid" style={{ marginBottom: 16 }}>
+        <span>{L("Nilai deposit", "Deposit amount")}</span><span><strong>{v(contract.deposit || "Rp0")}</strong></span>
+        <span>{L("Status", "Status")}</span><span><Status>{formatDepositStatus(depositStatus)}</Status></span>
+      </div>
+      <div className="deposit-status-actions actions" style={{ marginBottom: 16 }}>
+        {(depositStatus === "active" || depositStatus === "partially_returned") && (
+          <>
+            <button className="button" onClick={() => { setShowDeductionForm(true); setDeductionAmount(""); setDeductionReason(""); }}><Plus />{L("Catat pemotongan", "Record deduction")}</button>
+            <button className="button primary" onClick={() => handleDepositStatus("fully_returned")}><Check />{L("Tandai dikembalikan semua", "Mark fully returned")}</button>
+          </>
+        )}
+        {depositStatus === "active" && (
+          <button className="button danger" onClick={() => handleDepositStatus("deducted")}><Trash2 />{L("Potong semua", "Deduct all")}</button>
+        )}
+      </div>
+      {deductions.length > 0 && (
+        <div className="deduction-list">
+          <strong className="cell-sub" style={{ display: "block", marginBottom: 8 }}>{L("Riwayat pemotongan", "Deduction history")}</strong>
+          {deductions.map((d, i) => (
+            <div className="activity" key={i}>
+              <span className="activity-icon"><Trash2 /></span>
+              <span><strong>{formatRp(d.amount)}</strong><span className="cell-sub">{d.reason} · {d.date}</span></span>
+              <button className="icon-button" aria-label={L("Hapus pemotongan", "Remove deduction")} onClick={() => { removeDeduction(contract.id, i); refreshDeposit(); }}><X /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      {showDeductionForm && (
+        <div className="form-grid" style={{ marginTop: 8 }}>
+          <div className="form-field">
+            <label htmlFor="deduction-amount">{L("Jumlah pemotongan", "Deduction amount")}</label>
+            <div className="money-input"><span>Rp</span><input id="deduction-amount" type="number" inputMode="numeric" min="0" step="1000" value={deductionAmount} onChange={e => setDeductionAmount(e.target.value)} /></div>
+          </div>
+          <div className="form-field full">
+            <label htmlFor="deduction-reason">{L("Alasan pemotongan", "Deduction reason")}</label>
+            <input id="deduction-reason" value={deductionReason} onChange={e => setDeductionReason(e.target.value)} placeholder={L("mis. Kerusakan AC, kunci hilang", "e.g. AC damage, lost keys")} />
+          </div>
+          <div className="actions" style={{ gridColumn: "1 / -1" }}>
+            <button className="button" onClick={() => setShowDeductionForm(false)}>{L("Batal", "Cancel")}</button>
+            <button className="button primary" disabled={!deductionAmount || !deductionReason} onClick={handleAddDeduction}><Plus />{L("Simpan pemotongan", "Save deduction")}</button>
+          </div>
+        </div>
+      )}
+    </section>
 
     <section className="panel contract-paper print-only" aria-hidden="true">
       <article className="contract-document">
