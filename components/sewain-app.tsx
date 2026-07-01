@@ -8,6 +8,7 @@ import {
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
 } from "lucide-react";
 import { invoices as seedInvoices, moduleData, properties as seedProperties, Row, units as seedUnits } from "@/lib/data";
+import { getDepositMetrics } from "@/lib/deposit";
 import { Locale, localizeValue, message, translate } from "@/lib/i18n";
 import { calcFee, defaultTokenConfig, formatRp, PropertyFeeRule, TokenConfig } from "@/lib/utility-token-config";
 import {
@@ -648,6 +649,7 @@ function TicketDragPreview({ preview }: { preview: Exclude<TicketDragPreviewStat
 
 function Dashboard({ go, reservations }: { go: (p: PageId) => void; reservations: Row[] }) {
   const { t, v } = useI18n();
+  const depositMetrics = (typeof window !== "undefined") ? getDepositMetrics() : { held: 0, returnedThisMonth: 0, deducted: 0 };
   const upcoming: [string, string][] = [];
   reservations.filter(r => r.status === "Kontrak Ditandatangani" && r.jadwalMasuk).forEach(r => upcoming.push([`Move-in ${v(r.unit)}`, v(r.jadwalMasuk)]));
   reservations.filter(r => isExpiringSoon(r)).forEach(r => upcoming.push([`${t("Kontrak berakhir")} · ${v(r.unit)}`, v(reservationEndDate(r.periode) ? fmtShort(reservationEndDate(r.periode)!) : r.periode)]));
@@ -663,6 +665,7 @@ function Dashboard({ go, reservations }: { go: (p: PageId) => void; reservations
       <div className="stat"><span>{t("Tagihan diterima")}</span><strong>{v("Rp42,8 jt")}</strong><small>{t("89% tertagih")}</small></div>
       <div className="stat"><span>{t("Perlu ditagih")}</span><strong>{v("Rp8,4 jt")}</strong><small style={{ color: "var(--danger)" }}>{t("6 tagihan")}</small></div>
       <div className="stat"><span>{t("Tiket terbuka")}</span><strong>4</strong><small>{t("2 ditugaskan")}</small></div>
+      <div className="stat"><span>{t("Deposit dikelola")}</span><strong>{v(formatRp(depositMetrics.held || 0))}</strong><small>{t("Total deposit")}</small></div>
     </div>
     <div className="split dashboard-split">
       <div>
