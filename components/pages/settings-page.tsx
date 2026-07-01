@@ -9,8 +9,8 @@ import { formatRp } from "@/lib/utility-token-config";
 import { Member, MemberStatus, Role, PermissionAction, ModuleId, PERMISSION_ACTIONS, PERMISSION_MODULES, initials, emptyPermissions } from "@/lib/access-control";
 import { PageHead, type PageId } from "./shared";
 
-type BotSettings = { greetingMessage: string; autoTranslate: boolean };
-const defaultBotSettings: BotSettings = { greetingMessage: "Halo! Selamat datang di layanan Sewain. Ada yang bisa dibantu?", autoTranslate: false };
+type BotSettings = { greetingMessage: string; autoTranslate: boolean; marketingContent: string };
+const defaultBotSettings: BotSettings = { greetingMessage: "Halo! Selamat datang di layanan Sewain. Ada yang bisa dibantu?", autoTranslate: false, marketingContent: "Halo! Anda belum terdaftar sebagai penyewa kami. Tertarik dengan unit yang tersedia? Kunjungi sewain.id atau hubungi kami untuk info lebih lanjut." };
 const BOT_SETTINGS_KEY = "sewain:bot-settings";
 
 function slug(value: unknown) {
@@ -231,6 +231,11 @@ export function SettingsPage({ notify, integrationConfig, setIntegrationConfig }
                                     <span className="switch-slider" />
                                   </label>
                                 </div>
+                                <div className="form-field full">
+                                  <label htmlFor="marketing-content">{locale === "en" ? "Marketing content (unmatched users)" : "Konten marketing (pengguna tak dikenal)"}</label>
+                                  <p className="subtext">{locale === "en" ? "Sent when a WhatsApp or Telegram user doesn't match any tenant record." : "Dikirim saat pengguna WA/TG tidak cocok dengan data penyewa mana pun."}</p>
+                                  <textarea id="marketing-content" rows={4} value={botSettings.marketingContent} onChange={e => setBotSettings(s => ({ ...s, marketingContent: e.target.value }))} style={{ width: "100%", resize: "vertical" }} />
+                                </div>
                                 <div className="actions" style={{ marginTop: 4 }}>
                                   <button type="button" className="button primary" disabled={botSaving} onClick={async () => {
                                     setBotSaving(true);
@@ -241,6 +246,7 @@ export function SettingsPage({ notify, integrationConfig, setIntegrationConfig }
                                         body: JSON.stringify({
                                           greeting_message: botSettings.greetingMessage,
                                           auto_translate: String(botSettings.autoTranslate),
+                                          marketing_content: botSettings.marketingContent,
                                         }),
                                       });
                                       if (!res.ok) throw new Error("Save failed");
@@ -261,6 +267,7 @@ export function SettingsPage({ notify, integrationConfig, setIntegrationConfig }
                                         setBotSettings({
                                           greetingMessage: data.config.greeting_message || defaultBotSettings.greetingMessage,
                                           autoTranslate: data.config.auto_translate === "true",
+                                          marketingContent: data.config.marketing_content || defaultBotSettings.marketingContent,
                                         });
                                         notify(locale === "en" ? "Bot settings loaded." : "Pengaturan bot dimuat.");
                                       }

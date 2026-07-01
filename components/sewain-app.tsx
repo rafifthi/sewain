@@ -1137,6 +1137,7 @@ export function TenantDialog({ state, onClose, onSave }: { state: Exclude<Dialog
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!values.gambarIdentitas) return setError(t("Unggah gambar kartu identitas."));
+    if (values.telegram_id.trim() && !/^\d{5,12}$/.test(values.telegram_id.trim())) return setError(t("Telegram ID harus berupa 5-12 digit angka."));
     onSave("tenants", { ...row, id: row?.id || `tenants-${Date.now()}`, ...values, status: row?.status || "Belum ada sewa" });
   };
   return <div className="backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}><form className="dialog tenant-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="tenant-form-title">
@@ -1422,7 +1423,29 @@ function SewainContent() {
     return !current;
   });
   const openBooking = (ctx: BookingState) => { setBooking(ctx); setMobileNav(false); };
-  const save = (target: PageId, row: Row) => { const store = stores[target]; if (!store) return; const [, setter] = store; setter(old => row._delete ? old.filter(item => item.id !== row.id) : old.some(r => r.id === row.id) ? old.map(r => r.id === row.id ? row : r) : [row, ...old]); setDialog(null); notify(row._delete ? message(locale, "removed", { item: t(pageMeta[target].singular) }) : message(locale, "saved", { item: t(pageMeta[target].singular) })); };
+  const save = (target: PageId, row: Row) => {
+    const store = stores[target];
+    if (!store) return;
+    const [currentRows, setter] = store;
+    // Audit log: track telegram_id changes
+    if (target === "tenants" && row.telegram_id !== undefined) {
+      const prev = currentRows.find(r => r.id === row.id);
+      const oldVal = prev?.telegram_id ?? "";
+      const newVal = row.telegram_id ?? "";
+      if (oldVal !== newVal) {
+        const action = !oldVal && newVal ? "telegram_id_added" : oldVal && !newVal ? "telegram_id_removed" : "telegram_id_updated";
+        const auditEntry = { action, tenantName: row.nama, oldValue: oldVal, newValue: newVal, timestamp: new Date().toISOString() };
+        try {
+          const log = JSON.parse(localStorage.getItem("sewain:audit-log") || "[]");
+          log.push(auditEntry);
+          localStorage.setItem("sewain:audit-log", JSON.stringify(log));
+        } catch {}
+      }
+    }
+    setter(old => row._delete ? old.filter(item => item.id !== row.id) : old.some(r => r.id === row.id) ? old.map(r => r.id === row.id ? row : r) : [row, ...old]);
+    setDialog(null);
+    notify(row._delete ? message(locale, "removed", { item: t(pageMeta[target].singular) }) : message(locale, "saved", { item: t(pageMeta[target].singular) }));
+  };
   const currentStore = stores[page];
 
   const navAllowed = (id: string) => id === "dashboard" || id === "calendar" || access.can(id as ModuleId, "view");
