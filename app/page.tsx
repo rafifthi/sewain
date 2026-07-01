@@ -1,5 +1,10 @@
 import { SewainApp } from "@/components/sewain-app";
+import { AuthGuard } from "@/components/context/auth-guard";
 
 export default function Home() {
-  return <SewainApp />;
+  return (
+    <AuthGuard>
+      <SewainApp />
+    </AuthGuard>
+  );
 }
