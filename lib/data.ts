@@ -21,7 +21,7 @@ export const units: Row[] = [
 
 export const moduleData: Record<string, Row[]> = {
   tenants: [
-    { id: "t1", nama: "Ahmad Fauzi", telepon: "0812 3456 7890", email: "ahmad.fauzi@email.com", nomorIdentitas: "3273011203950007", gambarIdentitas: "/ktp-placeholder.svg", kontakDarurat: "Nur Aisyah", teleponDarurat: "0812 9911 2200", unit: "Melati 101", sejak: "1 Mar 2025", periodeSewa: "1 Mar 2025 - 28 Feb 2026", status: "Aktif" },
+    { id: "t1", nama: "Ahmad Fauzi", telepon: "0812 3456 7890", email: "ahmad.fauzi@email.com", telegram_id: "123456789", telegram_chat_id: "123456789", nomorIdentitas: "3273011203950007", gambarIdentitas: "/ktp-placeholder.svg", kontakDarurat: "Nur Aisyah", teleponDarurat: "0812 9911 2200", unit: "Melati 101", sejak: "1 Mar 2025", periodeSewa: "1 Mar 2025 - 28 Feb 2026", status: "Aktif" },
     { id: "t2", nama: "Siti Nurhaliza", telepon: "0813 7721 4410", email: "siti.nurhaliza@email.com", nomorIdentitas: "3276025002960004", gambarIdentitas: "/ktp-placeholder.svg", kontakDarurat: "Budi Hermawan", teleponDarurat: "0813 2244 8801", unit: "Melati 102", sejak: "10 Feb 2025", periodeSewa: "10 Feb 2025 - 9 Feb 2026", status: "Aktif" },
     { id: "t3", nama: "M. Iqbal Maulana", telepon: "0819 8802 3104", email: "iqbal.maulana@email.com", nomorIdentitas: "3273052707980003", gambarIdentitas: "/ktp-placeholder.svg", kontakDarurat: "Hendra Maulana", teleponDarurat: "0819 1102 3304", unit: "Melati 104", sejak: "", periodeSewa: "", status: "Dipesan" },
     { id: "t4", nama: "Rani Oktaviani", telepon: "0812 7704 1189", email: "rani.oktaviani@email.com", nomorIdentitas: "3276015504000008", gambarIdentitas: "/ktp-placeholder.svg", kontakDarurat: "Dedi Oktavian", teleponDarurat: "0812 3340 9921", status: "Belum ada sewa" },

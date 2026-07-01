@@ -244,6 +244,7 @@ export function TenantDialog({ state, onClose, onSave }: { state: Exclude<Dialog
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!values.gambarIdentitas) return setError(t("Unggah gambar kartu identitas."));
+    if (values.telegram_id.trim() && !/^\d{5,12}$/.test(values.telegram_id.trim())) return setError(t("Telegram ID harus berupa 5-12 digit angka."));
     onSave("tenants", { ...row, id: row?.id || `tenants-${Date.now()}`, ...values, status: row?.status || "Belum ada sewa" });
   };
   return <div className="backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}><form className="dialog tenant-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="tenant-form-title">
