@@ -15,9 +15,9 @@ export function getDepositStatus(contractId: string): DepositStatus {
   return map[contractId]?.status || "active";
 }
 
-export function setDepositStatus(contractId: string, status: DepositStatus) {
+export function setDepositStatus(contractId: string, status: DepositStatus, amount?: number) {
   const map = readAll();
-  map[contractId] = { ...map[contractId], status, contractId };
+  map[contractId] = { ...map[contractId], status, contractId, ...(amount !== undefined ? { amount } : {}) };
   saveAll(map);
 }
 
@@ -28,7 +28,8 @@ export function getDeductions(contractId: string): DeductionEntry[] {
 
 export function addDeduction(contractId: string, deduction: DeductionEntry) {
   const map = readAll();
-  const current = map[contractId] || { contractId, status: "active" as DepositStatus, deductions: [] };
+  const existing = map[contractId];
+  const current = existing || { contractId, status: "active" as DepositStatus, deductions: [] };
   current.deductions = [...(current.deductions || []), deduction];
   if (current.status === "active") current.status = "partially_returned";
   map[contractId] = current;
@@ -56,6 +57,10 @@ export function getDepositMetrics(): { held: number; returnedThisMonth: number; 
   let deducted = 0;
 
   for (const entry of Object.values(map)) {
+    // Sum up deposit amounts for active/partial statuses
+    if ((entry.status === "active" || entry.status === "partially_returned") && entry.amount) {
+      held += entry.amount;
+    }
     for (const d of entry.deductions || []) {
       deducted += d.amount;
       const dMonth = d.date.slice(0, 7);
@@ -76,7 +81,7 @@ export function formatDepositStatus(status: DepositStatus): string {
   return labels[status];
 }
 
-type DepositStore = Record<string, { contractId: string; status: DepositStatus; deductions: DeductionEntry[] }>;
+type DepositStore = Record<string, { contractId: string; status: DepositStatus; amount?: number; deductions: DeductionEntry[] }>;
 
 function readAll(): DepositStore {
   try {

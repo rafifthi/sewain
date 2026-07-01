@@ -86,7 +86,7 @@ function ContractDetail({ contract, setContracts, templates, reservations, setRe
   const [deductionAmount, setDeductionAmount] = useState("");
   const [deductionReason, setDeductionReason] = useState("");
   const refreshDeposit = () => { setLocalDepositStatus(getDepositStatus(contract.id)); setLocalDeductions(getDeductions(contract.id)); };
-  const handleDepositStatus = (status: DepositStatus) => { setDepositStatus(contract.id, status); refreshDeposit(); notify(L(`Deposit status diubah ke ${formatDepositStatus(status)}`, `Deposit status changed to ${formatDepositStatus(status)}`)); };
+  const handleDepositStatus = (status: DepositStatus) => { setDepositStatus(contract.id, status, rupiah(contract.deposit)); refreshDeposit(); notify(L(`Deposit status diubah ke ${formatDepositStatus(status)}`, `Deposit status changed to ${formatDepositStatus(status)}`)); };
   const handleAddDeduction = () => {
     if (!deductionAmount || !deductionReason) return;
     const amount = rupiah(deductionAmount);
