@@ -193,6 +193,44 @@ export function SettingsPage({ notify, integrationConfig, setIntegrationConfig }
       notify(locale === "en" ? "Telegram bot connection failed." : "Koneksi Telegram bot gagal.");
     }
   };
+  const saveBotSettings = async () => {
+    setBotSaving(true);
+    try {
+      const res = await fetch(`${integrationConfig.botUrl}/api/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": integrationConfig.apiKey },
+        body: JSON.stringify({
+          greeting_message: botSettings.greetingMessage,
+          auto_translate: String(botSettings.autoTranslate),
+          marketing_content: botSettings.marketingContent,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      notify(locale === "en" ? "Bot settings saved." : "Pengaturan bot tersimpan.");
+    } catch {
+      notify(locale === "en" ? "Failed to save bot settings. Check bot URL and API key." : "Gagal menyimpan. Periksa URL bot dan API key.");
+    }
+    setBotSaving(false);
+  };
+  const loadBotSettings = async () => {
+    try {
+      const res = await fetch(`${integrationConfig.botUrl}/api/config`, {
+        headers: { "x-api-key": integrationConfig.apiKey },
+      });
+      if (!res.ok) throw new Error("Load failed");
+      const data = await res.json();
+      if (data.ok && data.config) {
+        setBotSettings({
+          greetingMessage: data.config.greeting_message || defaultBotSettings.greetingMessage,
+          autoTranslate: data.config.auto_translate === "true",
+          marketingContent: data.config.marketing_content || defaultBotSettings.marketingContent,
+        });
+        notify(locale === "en" ? "Bot settings loaded." : "Pengaturan bot dimuat.");
+      }
+    } catch {
+      notify(locale === "en" ? "Failed to load bot settings." : "Gagal memuat pengaturan bot.");
+    }
+  };
   const configTab = ["Organisasi", "Penagihan", "Token PLN", "Integrasi"].includes(tab);
   return <><PageHead page="settings" /><section className="panel"><div className="tabs">{["Organisasi", "Penagihan", "Token PLN", "Integrasi", "Pengguna", "Peran"].map(item => <button key={item} onClick={() => setTab(item)} className={`tab ${tab === item ? "active" : ""}`}>{t(item)}</button>)}</div><div className="dialog-body" style={{ maxWidth: configTab ? 720 : "100%" }}>
     {tab === "Organisasi" && <div className="form-grid"><Field label="Nama organisasi" value="PT Makmur Sejahtera" autoComplete="organization" /><Field label="Zona waktu" value="Asia/Jakarta" options={["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"]} /><Field full multiline label="Alamat" value="Jl. Melati No. 45, Depok, Jawa Barat" autoComplete="street-address" /></div>}
@@ -212,73 +250,41 @@ export function SettingsPage({ notify, integrationConfig, setIntegrationConfig }
         <p className="subtext">{locale === "en" ? 'Manage the global platform fee from the Token PLN page using the "Manage fee" button.' : 'Kelola biaya platform global dari halaman Token PLN menggunakan tombol "Kelola biaya".'}</p>
       </div>
     </div>}
-    {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><Bot /></span><span><strong>Telegram Bot @theDaedalus_bot</strong><span className="cell-sub">Kirim notifikasi ke penyewa via Telegram</span></span><span className={`badge ${integrationConfig.apiKey ? "success" : ""}`}>{integrationConfig.apiKey ? "Terhubung" : "Belum terkonfigurasi"}</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="telegram-bot-url">Bot API URL</label><input id="telegram-bot-url" type="text" value={integrationConfig.botUrl} onChange={event => setIntegrationConfig({ ...integrationConfig, botUrl: event.target.value })} /></div><div className="form-field full"><label htmlFor="telegram-api-key">API Key</label><input id="telegram-api-key" type="password" value={integrationConfig.apiKey} onChange={event => setIntegrationConfig({ ...integrationConfig, apiKey: event.target.value })} /></div></div><div className="actions" style={{ marginTop: 12, marginBottom: 16 }}><button type="button" className="button" onClick={testTelegram}>Uji Koneksi</button></div>
-                            <div className="bot-settings-panel">
-                              <button className="link-button" onClick={() => setBotPanel(!botPanel)}>
-                                <MessageSquareText />{locale === "en" ? "Bot Settings" : "Pengaturan Bot"}<ChevronDown className={`chevron ${botPanel ? "open" : ""}`} />
-                              </button>
-                              {botPanel && <div className="form-grid" style={{ marginTop: 12 }}>
-                                <div className="form-field full">
-                                  <label htmlFor="greeting-message">{locale === "en" ? "Greeting message" : "Pesan sambutan"}</label>
-                                  <p className="subtext">{locale === "en" ? "Sent automatically when a tenant messages the bot for the first time." : "Dikirim otomatis saat penyewa chat bot untuk pertama kali."}</p>
-                                  <textarea id="greeting-message" rows={4} value={botSettings.greetingMessage} onChange={e => setBotSettings(s => ({ ...s, greetingMessage: e.target.value }))} style={{ width: "100%", resize: "vertical" }} />
-                                </div>
-                                <div className="form-field full">
-                                  <label htmlFor="auto-translate">{locale === "en" ? "Auto-Translate" : "Terjemahan otomatis"}</label>
-                                  <p className="subtext">{locale === "en" ? "Bot will detect the tenant's language and respond in the same language." : "Bot akan mendeteksi bahasa penyewa dan menjawab dengan bahasa yang sama."}</p>
-                                  <label className="switch">
-                                    <input id="auto-translate" type="checkbox" checked={botSettings.autoTranslate} onChange={e => setBotSettings(s => ({ ...s, autoTranslate: e.target.checked }))} />
-                                    <span className="switch-slider" />
-                                  </label>
-                                </div>
-                                <div className="form-field full">
-                                  <label htmlFor="marketing-content">{locale === "en" ? "Marketing content (unmatched users)" : "Konten marketing (pengguna tak dikenal)"}</label>
-                                  <p className="subtext">{locale === "en" ? "Sent when a WhatsApp or Telegram user doesn't match any tenant record." : "Dikirim saat pengguna WA/TG tidak cocok dengan data penyewa mana pun."}</p>
-                                  <textarea id="marketing-content" rows={4} value={botSettings.marketingContent} onChange={e => setBotSettings(s => ({ ...s, marketingContent: e.target.value }))} style={{ width: "100%", resize: "vertical" }} />
-                                </div>
-                                <div className="actions" style={{ marginTop: 4 }}>
-                                  <button type="button" className="button primary" disabled={botSaving} onClick={async () => {
-                                    setBotSaving(true);
-                                    try {
-                                      const res = await fetch(`${integrationConfig.botUrl}/api/config`, {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json", "x-api-key": integrationConfig.apiKey },
-                                        body: JSON.stringify({
-                                          greeting_message: botSettings.greetingMessage,
-                                          auto_translate: String(botSettings.autoTranslate),
-                                          marketing_content: botSettings.marketingContent,
-                                        }),
-                                      });
-                                      if (!res.ok) throw new Error("Save failed");
-                                      notify(locale === "en" ? "Bot settings saved." : "Pengaturan bot tersimpan.");
-                                    } catch {
-                                      notify(locale === "en" ? "Failed to save bot settings. Check bot URL and API key." : "Gagal menyimpan. Periksa URL bot dan API key.");
-                                    }
-                                    setBotSaving(false);
-                                  }}>{botSaving ? (locale === "en" ? "Saving..." : "Menyimpan...") : <><Check />{locale === "en" ? "Save to Bot" : "Simpan ke Bot"}</>}</button>
-                                  <button type="button" className="button" onClick={async () => {
-                                    try {
-                                      const res = await fetch(`${integrationConfig.botUrl}/api/config`, {
-                                        headers: { "x-api-key": integrationConfig.apiKey },
-                                      });
-                                      if (!res.ok) throw new Error("Load failed");
-                                      const data = await res.json();
-                                      if (data.ok && data.config) {
-                                        setBotSettings({
-                                          greetingMessage: data.config.greeting_message || defaultBotSettings.greetingMessage,
-                                          autoTranslate: data.config.auto_translate === "true",
-                                          marketingContent: data.config.marketing_content || defaultBotSettings.marketingContent,
-                                        });
-                                        notify(locale === "en" ? "Bot settings loaded." : "Pengaturan bot dimuat.");
-                                      }
-                                    } catch {
-                                      notify(locale === "en" ? "Failed to load bot settings." : "Gagal memuat pengaturan bot.");
-                                    }
-                                  }}>{locale === "en" ? "Load from Bot" : "Muat dari Bot"}</button>
-                                </div>
-                              </div>}
-                            </div>
-                            <hr /><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>Token PLN · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Integrasi dengan API token")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Token integration test succeeded." : "Tes integrasi token berhasil.")}>{t("Tes")}</button></div></div>}
+    {tab === "Integrasi" && <div><div className="activity"><span className="activity-icon"><Bot /></span><span><strong>Telegram Bot @theDaedalus_bot</strong><span className="cell-sub">Kirim notifikasi ke penyewa via Telegram</span></span><span className={`badge ${integrationConfig.apiKey ? "success" : ""}`}>{integrationConfig.apiKey ? "Terhubung" : "Belum terkonfigurasi"}</span></div><div className="form-grid"><div className="form-field full"><label htmlFor="telegram-bot-url">Bot API URL</label><input id="telegram-bot-url" type="text" value={integrationConfig.botUrl} onChange={event => setIntegrationConfig({ ...integrationConfig, botUrl: event.target.value })} /></div><div className="form-field full"><label htmlFor="telegram-api-key">API Key</label><input id="telegram-api-key" type="password" value={integrationConfig.apiKey} onChange={event => setIntegrationConfig({ ...integrationConfig, apiKey: event.target.value })} /></div></div><div className="actions integration-actions"><button type="button" className="button" onClick={testTelegram}>Uji Koneksi</button></div>
+      <section className={`bot-settings-panel ${botPanel ? "open" : ""}`}>
+        <button type="button" className="bot-settings-trigger" onClick={() => setBotPanel(open => !open)} aria-expanded={botPanel} aria-controls="bot-settings-content">
+          <span className="bot-settings-icon"><MessageSquareText /></span>
+          <span className="bot-settings-copy"><strong>{locale === "en" ? "Bot settings" : "Pengaturan bot"}</strong><span>{locale === "en" ? "Greeting, translation, and fallback messages" : "Pesan sambutan, terjemahan, dan fallback"}</span></span>
+          <span className={`bot-settings-state ${botSettings.autoTranslate ? "success" : ""}`}>{botSettings.autoTranslate ? (locale === "en" ? "Auto" : "Otomatis") : (locale === "en" ? "Manual" : "Manual")}</span>
+          <ChevronDown className="bot-settings-chevron" aria-hidden="true" />
+        </button>
+        <div id="bot-settings-content" className="bot-settings-content" aria-hidden={!botPanel}>
+          <fieldset className="bot-settings-inner form-grid" disabled={!botPanel}>
+            <div className="form-field full">
+              <label htmlFor="greeting-message">{locale === "en" ? "Greeting message" : "Pesan sambutan"}</label>
+              <p className="subtext">{locale === "en" ? "Sent automatically when a tenant messages the bot for the first time." : "Dikirim otomatis saat penyewa chat bot untuk pertama kali."}</p>
+              <textarea id="greeting-message" rows={4} value={botSettings.greetingMessage} onChange={e => setBotSettings(s => ({ ...s, greetingMessage: e.target.value }))} />
+            </div>
+            <div className="bot-toggle-row full">
+              <span><strong>{locale === "en" ? "Auto-translate" : "Terjemahan otomatis"}</strong><span>{locale === "en" ? "Detect tenant language and respond in the same language." : "Deteksi bahasa penyewa dan jawab dengan bahasa yang sama."}</span></span>
+              <label className="switch" htmlFor="auto-translate">
+                <input id="auto-translate" type="checkbox" checked={botSettings.autoTranslate} onChange={e => setBotSettings(s => ({ ...s, autoTranslate: e.target.checked }))} />
+                <span className="switch-track"><span className="switch-thumb" /></span>
+              </label>
+            </div>
+            <div className="form-field full">
+              <label htmlFor="marketing-content">{locale === "en" ? "Marketing content (unmatched users)" : "Konten marketing (pengguna tak dikenal)"}</label>
+              <p className="subtext">{locale === "en" ? "Sent when a WhatsApp or Telegram user doesn't match any tenant record." : "Dikirim saat pengguna WA/TG tidak cocok dengan data penyewa mana pun."}</p>
+              <textarea id="marketing-content" rows={4} value={botSettings.marketingContent} onChange={e => setBotSettings(s => ({ ...s, marketingContent: e.target.value }))} />
+            </div>
+            <div className="actions full">
+              <button type="button" className="button primary" disabled={botSaving} onClick={saveBotSettings}>{botSaving ? (locale === "en" ? "Saving..." : "Menyimpan...") : <><Check />{locale === "en" ? "Save to Bot" : "Simpan ke Bot"}</>}</button>
+              <button type="button" className="button" onClick={loadBotSettings}>{locale === "en" ? "Load from Bot" : "Muat dari Bot"}</button>
+            </div>
+          </fieldset>
+        </div>
+      </section>
+      <hr /><div className="activity"><span className="activity-icon"><MessageSquareText /></span><span><strong>WhatsApp · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Pesan dicatat tanpa dikirim ke nomor asli")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "WhatsApp test succeeded in simulation mode." : "Tes WhatsApp berhasil dalam mode simulasi.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>Payment gateway · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Tautan pembayaran menggunakan data lokal")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Payment gateway test succeeded." : "Tes payment gateway berhasil.")}>{t("Tes")}</button></div><div className="activity"><span className="activity-icon"><Zap /></span><span><strong>Token PLN · {t("Mode simulasi")}</strong><span className="cell-sub">{t("Integrasi dengan API token")}</span></span><button className="button" onClick={() => notify(locale === "en" ? "Token integration test succeeded." : "Tes integrasi token berhasil.")}>{t("Tes")}</button></div></div>}
     {tab === "Pengguna" && <MembersPanel notify={notify} />}
     {tab === "Peran" && <RolesPanel notify={notify} />}
     {configTab && <div className="actions" style={{ marginTop: 20 }}><button className="button primary" onClick={() => notify(message(locale, "settings", { section: t(tab) }))}>{t("Simpan perubahan")}</button></div>}

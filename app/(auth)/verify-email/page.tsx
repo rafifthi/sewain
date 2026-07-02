@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { AlertCircle, Building2, CheckCircle2, LoaderCircle } from "lucide-react";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -35,19 +36,21 @@ function VerifyEmailContent() {
   }, [token]);
 
   return (
-    <div className="text-center space-y-4">
+    <div className="auth-status-stack">
       {status === "loading" && (
-        <div className="flex justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="auth-status neutral">
+          <LoaderCircle className="auth-spinner" aria-hidden="true" />
+          <span>Memverifikasi tautan...</span>
         </div>
       )}
 
       {status === "success" && (
         <>
-          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-            {message}
+          <div className="auth-status success">
+            <CheckCircle2 aria-hidden="true" />
+            <span>{message}</span>
           </div>
-          <Link href="/login" className="block text-sm text-blue-600 hover:text-blue-500 font-medium">
+          <Link href="/login" className="auth-link strong">
             Masuk ke akun Anda
           </Link>
         </>
@@ -55,10 +58,11 @@ function VerifyEmailContent() {
 
       {status === "error" && (
         <>
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {message}
+          <div className="auth-status error">
+            <AlertCircle aria-hidden="true" />
+            <span>{message}</span>
           </div>
-          <Link href="/login" className="block text-sm text-blue-600 hover:text-blue-500">
+          <Link href="/login" className="auth-link strong">
             Kembali ke halaman masuk
           </Link>
         </>
@@ -69,16 +73,22 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-gray-900">Verifikasi Email</h1>
-          <p className="text-sm text-gray-500 mt-1">Memverifikasi alamat email Anda</p>
+    <main className="auth-page">
+      <section className="auth-card auth-card-single" aria-labelledby="verify-email-title">
+        <div className="auth-card-head center">
+          <div className="auth-mobile-brand always">
+            <span className="auth-brand-mark" aria-hidden="true">
+              <Building2 />
+            </span>
+            <span>Sewain</span>
+          </div>
+          <h1 id="verify-email-title">Verifikasi Email</h1>
+          <p>Memverifikasi alamat email Anda.</p>
         </div>
-        <Suspense fallback={<div className="flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
+        <Suspense fallback={<div className="auth-status neutral"><LoaderCircle className="auth-spinner" aria-hidden="true" /><span>Memuat...</span></div>}>
           <VerifyEmailContent />
         </Suspense>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

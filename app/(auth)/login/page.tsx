@@ -3,6 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { AlertCircle, ArrowRight, Building2, Lock, Mail } from "lucide-react";
 import { useAuth } from "@/components/context/auth-context";
 
 export default function LoginPage() {
@@ -28,74 +29,108 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-gray-900">Masuk ke Sewain</h1>
-          <p className="text-sm text-gray-500 mt-1">Kelola properti Anda dengan mudah</p>
-        </div>
-
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {error}
+    <main className="auth-page">
+      <section className="auth-stage" aria-labelledby="login-title">
+        <aside className="auth-hero" aria-label="Ringkasan Sewain">
+          <div className="auth-brand">
+            <span className="auth-brand-mark" aria-hidden="true">
+              <Building2 />
+            </span>
+            <span>Sewain</span>
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="email@contoh.com"
-            />
+          <div className="auth-hero-copy">
+            <p className="auth-kicker">Operasional properti</p>
+            <h2>Semua data sewa tetap rapi saat hari sedang penuh.</h2>
+            <p>Masuk untuk memantau unit, penyewa, kontrak, tagihan, dan pekerjaan harian dari satu ruang kerja.</p>
           </div>
+          <div className="auth-snapshot" aria-hidden="true">
+            <div>
+              <span>Okupansi</span>
+              <strong>94%</strong>
+            </div>
+            <div>
+              <span>Tagihan bulan ini</span>
+              <strong>128</strong>
+            </div>
+            <div>
+              <span>Tiket aktif</span>
+              <strong>12</strong>
+            </div>
+          </div>
+        </aside>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Kata Sandi
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••••"
-            />
+        <div className="auth-card">
+          <div className="auth-card-head">
+            <div className="auth-mobile-brand">
+              <span className="auth-brand-mark" aria-hidden="true">
+                <Building2 />
+              </span>
+              <span>Sewain</span>
+            </div>
+            <h1 id="login-title">Masuk ke Sewain</h1>
+            <p>Kelola properti Anda dengan mudah.</p>
           </div>
 
-          <div className="flex justify-end">
-            <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500">
-              Lupa kata sandi?
+          {error && (
+            <div className="auth-alert" role="alert">
+              <AlertCircle />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="auth-form">
+            <div className="auth-field">
+              <label htmlFor="email">Email</label>
+              <div className="auth-input-wrap">
+                <Mail aria-hidden="true" />
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@contoh.com"
+                />
+              </div>
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="password">Kata sandi</label>
+              <div className="auth-input-wrap">
+                <Lock aria-hidden="true" />
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Masukkan kata sandi"
+                />
+              </div>
+            </div>
+
+            <div className="auth-form-row">
+              <Link href="/forgot-password" className="auth-link">
+                Lupa kata sandi?
+              </Link>
+            </div>
+
+            <button type="submit" disabled={loading} className="auth-submit">
+              <span>{loading ? "Memproses..." : "Masuk"}</span>
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            Belum punya akun?{" "}
+            <Link href="/signup" className="auth-link strong">
+              Daftar sekarang
             </Link>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? "Memproses..." : "Masuk"}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-500">
-          Belum punya akun?{" "}
-          <Link href="/signup" className="text-blue-600 hover:text-blue-500 font-medium">
-            Daftar sekarang
-          </Link>
-        </p>
-      </div>
-    </div>
+          </p>
+        </div>
+      </section>
+    </main>
   );
 }

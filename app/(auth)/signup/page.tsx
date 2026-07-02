@@ -3,6 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { AlertCircle, ArrowRight, Building2, Lock, Mail, UserRound } from "lucide-react";
 import { useAuth } from "@/components/context/auth-context";
 
 export default function SignupPage() {
@@ -33,84 +34,118 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-gray-900">Buat Akun Sewain</h1>
-          <p className="text-sm text-gray-500 mt-1">Mulai kelola properti Anda hari ini</p>
+    <main className="auth-page">
+      <section className="auth-stage" aria-labelledby="signup-title">
+        <aside className="auth-hero" aria-label="Ringkasan Sewain">
+          <div className="auth-brand">
+            <span className="auth-brand-mark" aria-hidden="true">
+              <Building2 />
+            </span>
+            <span>Sewain</span>
+          </div>
+          <div className="auth-hero-copy">
+            <p className="auth-kicker">Operasional properti</p>
+            <h2>Mulai dari daftar unit, lalu biarkan alur sewanya mengikuti.</h2>
+            <p>Buat akun untuk menata penyewa, kontrak, invoice, dan pekerjaan lapangan dalam satu tempat.</p>
+          </div>
+          <div className="auth-snapshot" aria-hidden="true">
+            <div>
+              <span>Setup awal</span>
+              <strong>10m</strong>
+            </div>
+            <div>
+              <span>Modul inti</span>
+              <strong>6</strong>
+            </div>
+            <div>
+              <span>Akses tim</span>
+              <strong>Siap</strong>
+            </div>
+          </div>
+        </aside>
+
+        <div className="auth-card">
+          <div className="auth-card-head">
+            <div className="auth-mobile-brand">
+              <span className="auth-brand-mark" aria-hidden="true">
+                <Building2 />
+              </span>
+              <span>Sewain</span>
+            </div>
+            <h1 id="signup-title">Buat akun Sewain</h1>
+            <p>Mulai kelola properti Anda hari ini.</p>
+          </div>
+
+          {error && (
+            <div className="auth-alert" role="alert">
+              <AlertCircle />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="auth-form">
+            <div className="auth-field">
+              <label htmlFor="name">Nama lengkap</label>
+              <div className="auth-input-wrap">
+                <UserRound aria-hidden="true" />
+                <input
+                  id="name"
+                  type="text"
+                  required
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Nama Anda"
+                />
+              </div>
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="email">Email</label>
+              <div className="auth-input-wrap">
+                <Mail aria-hidden="true" />
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@contoh.com"
+                />
+              </div>
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="password">Kata sandi</label>
+              <div className="auth-input-wrap">
+                <Lock aria-hidden="true" />
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min. 8 karakter"
+                />
+              </div>
+            </div>
+
+            <button type="submit" disabled={loading} className="auth-submit">
+              <span>{loading ? "Memproses..." : "Daftar"}</span>
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            Sudah punya akun?{" "}
+            <Link href="/login" className="auth-link strong">
+              Masuk di sini
+            </Link>
+          </p>
         </div>
-
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-              Nama Lengkap
-            </label>
-            <input
-              id="name"
-              type="text"
-              required
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Nama Anda"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="email@contoh.com"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Kata Sandi
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Min. 8 karakter"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? "Memproses..." : "Daftar"}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-500">
-          Sudah punya akun?{" "}
-          <Link href="/login" className="text-blue-600 hover:text-blue-500 font-medium">
-            Masuk di sini
-          </Link>
-        </p>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
