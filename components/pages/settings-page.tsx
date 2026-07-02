@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Bot, Check, ChevronDown, CreditCard, MessageSquareText, Pencil, Plus, ShieldCheck, Trash2, X, Zap } from "lucide-react";
 import { Row } from "@/lib/data";
-import { useI18n, useTokenConfig, useAccess } from "@/components/context";
+import { useI18n, useTokenConfig, useAccess, useConfirm } from "@/components/context";
 import { message, type Locale } from "@/lib/i18n";
 import { formatRp } from "@/lib/utility-token-config";
 import { Member, MemberStatus, Role, PermissionAction, ModuleId, PERMISSION_ACTIONS, PERMISSION_MODULES, initials, emptyPermissions } from "@/lib/access-control";
@@ -51,14 +51,22 @@ const memberStatusLabel: Record<MemberStatus, string> = { active: "Aktif", invit
 
 function MembersPanel({ notify }: { notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
+  const confirm = useConfirm();
   const { roles, members, currentUserId, setMembers, setCurrentUserId, can } = useAccess();
   const [dialog, setDialog] = useState<{ member?: Member } | null>(null);
   const canManage = can("settings", "edit");
   const roleName = (id: string) => roles.find(r => r.id === id)?.name || "—";
   const updateMember = (id: string, patch: Partial<Member>) => setMembers(members.map(m => m.id === id ? { ...m, ...patch } : m));
-  const removeMember = (m: Member) => {
+  const removeMember = async (m: Member) => {
     if (m.roleId === "owner" && members.filter(x => x.roleId === "owner").length === 1) { notify(locale === "en" ? "Cannot remove the last owner." : "Tidak bisa menghapus pemilik terakhir."); return; }
-    if (!window.confirm(locale === "en" ? `Remove ${m.name}?` : `Hapus ${m.name}?`)) return;
+    const ok = await confirm({
+      title: locale === "en" ? `Remove ${m.name}?` : `Hapus ${m.name}?`,
+      description: locale === "en" ? "They will lose access to this workspace." : "Anggota ini akan kehilangan akses ke workspace.",
+      confirmLabel: locale === "en" ? "Remove" : "Hapus",
+      cancelLabel: locale === "en" ? "Cancel" : "Batal",
+      danger: true,
+    });
+    if (!ok) return;
     const next = members.filter(x => x.id !== m.id);
     setMembers(next);
     if (currentUserId === m.id && next[0]) setCurrentUserId(next[0].id);
@@ -100,6 +108,7 @@ const actionLabel: Record<PermissionAction, string> = { view: "Lihat", create: "
 
 function RolesPanel({ notify }: { notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
+  const confirm = useConfirm();
   const { roles, members, currentRole, setRoles, can } = useAccess();
   const [selectedId, setSelectedId] = useState(roles[0]?.id || "");
   const canManage = can("settings", "edit");
@@ -125,10 +134,16 @@ function RolesPanel({ notify }: { notify: (s: string) => void }) {
     setSelectedId(id);
     notify(locale === "en" ? "Role created." : "Peran dibuat.");
   };
-  const deleteRole = () => {
+  const deleteRole = async () => {
     if (!selected || selected.system) return;
     if (memberCount(selected.id)) { notify(locale === "en" ? "Reassign members before deleting this role." : "Pindahkan anggota sebelum menghapus peran ini."); return; }
-    if (!window.confirm(locale === "en" ? `Delete role "${selected.name}"?` : `Hapus peran "${selected.name}"?`)) return;
+    const ok = await confirm({
+      title: locale === "en" ? `Delete role "${selected.name}"?` : `Hapus peran "${selected.name}"?`,
+      confirmLabel: locale === "en" ? "Delete" : "Hapus",
+      cancelLabel: locale === "en" ? "Cancel" : "Batal",
+      danger: true,
+    });
+    if (!ok) return;
     const next = roles.filter(r => r.id !== selected.id);
     setRoles(next);
     setSelectedId(next[0]?.id || "");

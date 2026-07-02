@@ -8,9 +8,10 @@ import {
   UserCheck, UserRound, UsersRound, WalletCards, Wrench, X, Zap,
 } from "lucide-react";
 import { invoices as seedInvoices, moduleData, properties as seedProperties, Row, units as seedUnits } from "@/lib/data";
+import { useDbRows, SYNC_ERROR_EVENT, type SyncErrorDetail } from "@/lib/client-data";
 import { getDepositMetrics } from "@/lib/deposit";
 import { Locale, localizeValue, message, translate } from "@/lib/i18n";
-import { calcFee, defaultTokenConfig, formatRp, PropertyFeeRule, TokenConfig } from "@/lib/utility-token-config";
+import { calcFee, defaultTokenConfig, formatRp, parseRp, PropertyFeeRule, TokenConfig } from "@/lib/utility-token-config";
 import {
   eventDescription, eventLabel, eventTiming, findEvent, MessageEvent, MessageTemplate,
   ORG_CONSTANTS, renderPreview, SEED_TEMPLATES, slugifyToken, TemplateOption, variableLabel, VariableDef,
@@ -58,11 +59,13 @@ type NotificationItem = {
 };
 type IntegrationConfig = { botUrl: string; apiKey: string };
 const defaultIntegrationConfig: IntegrationConfig = {
-  botUrl: process.env.NEXT_PUBLIC_BOT_URL || "https://property-manager-bot.vercel.app",
-  apiKey: process.env.NEXT_PUBLIC_BOT_API_KEY || "sewain-dev-key",
+  botUrl: process.env.NEXT_PUBLIC_BOT_URL || "",
+  // The bot API key is user-supplied configuration (Settings → Integrasi);
+  // it must never ship in the client bundle as a default.
+  apiKey: "",
 };
 
-import { I18nContext, useI18n, TokenConfigContext, useTokenConfig, AccessContext, useAccess, type I18nState, type AccessCtx } from "@/components/context";
+import { I18nContext, useI18n, TokenConfigContext, useTokenConfig, AccessContext, useAccess, ConfirmProvider, useConfirm, type I18nState, type AccessCtx } from "@/components/context";
 
 const pageMeta: Record<PageId, { title: string; description: string; singular: string }> = {
   dashboard: { title: "Ringkasan", description: "Hal yang perlu Anda tindak lanjuti hari ini.", singular: "aktivitas" },
@@ -81,12 +84,30 @@ const pageMeta: Record<PageId, { title: string; description: string; singular: s
   settings: { title: "Pengaturan", description: "Atur organisasi, penagihan, dan integrasi.", singular: "pengaturan" },
 };
 
-const notificationItems: NotificationItem[] = [
-  { id: "payment-in", page: "invoices", rowId: "INV-0525-0062", kind: "payment", title: "Pembayaran masuk", description: "Dewi Lestari membayar Rp1.200.000", time: "2 menit lalu" },
-  { id: "invoice-due", page: "invoices", rowId: "INV-0625-0090", kind: "reminder", title: "Tagihan jatuh tempo hari ini", description: "Ahmad Fauzi · Melati 101 · Rp1.200.000", time: "18 menit lalu" },
-  { id: "wa-maintenance", page: "tickets", rowId: "x2", kind: "maintenance", title: "Keluhan baru dari WA bot", description: "Keran wastafel terus bocor · Unit 103", time: "42 menit lalu" },
-  { id: "contract-signature", page: "contracts", rowId: "k2", kind: "contract", title: "Kontrak perlu ditandatangani", description: "M. Iqbal Maulana · KTR-2025-044", time: "1 jam lalu" },
-];
+/** Actionable notifications derived from live data — no fabricated events. */
+function buildNotificationItems(invoices: Row[], tickets: Row[], contracts: Row[]): NotificationItem[] {
+  const items: NotificationItem[] = [];
+  invoices.filter(r => r.status === "Terlambat" || r.status === "Jatuh tempo").slice(0, 3).forEach(r => {
+    items.push({
+      id: `inv-${r.id}`, page: "invoices", rowId: String(r.id), kind: "reminder",
+      title: r.status === "Terlambat" ? "Tagihan terlambat" : "Tagihan jatuh tempo",
+      description: `${r.penyewa ?? ""} · ${r.unit ?? ""} · ${r.sisa ?? ""}`, time: String(r.jatuhTempo ?? ""),
+    });
+  });
+  tickets.filter(r => r.status === "Baru").slice(0, 2).forEach(r => {
+    items.push({
+      id: `tkt-${r.id}`, page: "tickets", rowId: String(r.id), kind: "maintenance",
+      title: "Tiket baru", description: `${r.judul ?? ""} · ${r.unit ?? ""}`, time: "",
+    });
+  });
+  contracts.filter(r => r.status === "Draf" || r.status === "Menunggu tanda tangan").slice(0, 2).forEach(r => {
+    items.push({
+      id: `ktr-${r.id}`, page: "contracts", rowId: String(r.id), kind: "contract",
+      title: "Kontrak perlu ditandatangani", description: `${r.penyewa ?? ""} · ${r.nomor ?? ""}`, time: "",
+    });
+  });
+  return items;
+}
 
 type FormFieldSchema = { key: string; label: string; type?: React.HTMLInputTypeAttribute; options?: string[]; multiline?: boolean; inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"] };
 
@@ -143,32 +164,7 @@ const columnLabels: Record<string, string> = {
   jatuhTempo: "Jatuh tempo", total: "Total", sisa: "Sisa",
 };
 
-function useStoredRows(key: string, initial: Row[]): [Row[], React.Dispatch<React.SetStateAction<Row[]>>, boolean] {
-  const [rows, setRows] = useState<Row[]>(initial);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const saved = localStorage.getItem(`sewain:${key}`);
-    if (!saved) { setLoading(false); return; }
-    const parsed = JSON.parse(saved) as Row[];
-    if (key === "tenants" && localStorage.getItem("sewain:tenant-samples-v2") !== "true") {
-      const unassignedSample = initial.find(row => row.id === "t4");
-      if (unassignedSample && !parsed.some(row => row.id === unassignedSample.id)) parsed.push(unassignedSample);
-      localStorage.setItem("sewain:tenant-samples-v2", "true");
-      localStorage.setItem(`sewain:${key}`, JSON.stringify(parsed));
-    }
-    if (key === "properties" && localStorage.getItem("sewain:single-unit-samples-v1") !== "true") {
-      initial.filter(row => ["p5", "p6"].includes(row.id)).forEach(sample => {
-        if (!parsed.some(row => row.id === sample.id)) parsed.push(sample);
-      });
-      localStorage.setItem("sewain:single-unit-samples-v1", "true");
-      localStorage.setItem(`sewain:${key}`, JSON.stringify(parsed));
-    }
-    setRows(parsed);
-    setLoading(false);
-  }, [initial, key]);
-  useEffect(() => { localStorage.setItem(`sewain:${key}`, JSON.stringify(rows)); }, [key, rows]);
-  return [rows, setRows, loading];
-}
+// Module rows are server-backed now — see lib/client-data.ts (useDbRows).
 
 function useStoredConfig<T>(key: string, initial: T): [T, (v: T) => void] {
   const [value, setValue] = useState<T>(initial);
@@ -366,7 +362,7 @@ function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, g
   if (selected) {
     const payments = invoices.filter(invoice => invoice.penyewa === selected.nama);
     const tenantDocuments = documents.filter(document => document.terkait === selected.nama);
-    return <TenantDetail tenant={selected} payments={payments} documents={tenantDocuments} onBack={() => setSelected(null)} onEdit={() => openDialog({ mode: "edit", page: "tenants", row: selected })} onDelete={() => remove(selected)} goToProperties={goToProperties} />;
+    return <TenantDetail tenant={selected} payments={payments} documents={tenantDocuments} onBack={() => setSelected(null)} onEdit={() => openDialog({ mode: "edit", page: "tenants", row: selected })} onDelete={() => remove(selected)} goToProperties={goToProperties} notify={notify} />;
   }
 
   return <><PageHead page="tenants" action={() => openDialog({ mode: "create", page: "tenants" })} />
@@ -377,7 +373,8 @@ function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, g
     </section></>;
 }
 
-export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, goToProperties }: { tenant: Row; payments: Row[]; documents: Row[]; onBack: () => void; onEdit: () => void; onDelete: () => void; goToProperties: () => void }) {
+export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, goToProperties, notify }: { tenant: Row; payments: Row[]; documents: Row[]; onBack: () => void; onEdit: () => void; onDelete: () => void; goToProperties: () => void; notify?: (s: string) => void }) {
+  const confirm = useConfirm();
   const { locale, t, v } = useI18n();
   const activeLease = tenant.status === "Aktif" ? 1 : 0;
   const rupiahValue = (value: unknown) => Number(String(value || "0").replace(/[^\d]/g, ""));
@@ -388,11 +385,12 @@ export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDe
     const text = window.prompt(locale === "en" ? "Message text" : "Teks pesan");
     if (!text) return;
     try {
-      const response = await fetch("https://property-manager-bot.vercel.app/api/send", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": "sewain-dev-key" }, body: JSON.stringify({ chat_id: Number(tenant.telegram_id), text }) });
+      // Server proxy holds the bot credentials; the key never ships to the browser.
+      const response = await fetch("/api/bot/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: tenant.telegram_id, text }) });
       if (!response.ok) throw new Error("Telegram send failed");
-      window.alert(locale === "en" ? "Telegram message sent." : "Pesan Telegram terkirim.");
+      notify?.(locale === "en" ? "Telegram message sent." : "Pesan Telegram terkirim.");
     } catch {
-      window.alert(locale === "en" ? "Failed to send Telegram message." : "Gagal mengirim pesan Telegram.");
+      notify?.(locale === "en" ? "Failed to send Telegram message." : "Gagal mengirim pesan Telegram.");
     }
   };
   return <>
@@ -408,7 +406,7 @@ export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDe
     </main><aside className="tenant-side-column">
       <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Kontak & identitas")}</h2></div></div><div className="contact-list contact-identity-list"><div><MessageSquareText /><span><small>WhatsApp</small><a href={whatsappUrl(tenant.telepon)} target="_blank" rel="noreferrer">{v(tenant.telepon)}</a></span></div>{tenant.telegram_id && <div><Send /><span><small>Telegram</small><button className="text-button" onClick={sendTelegram}>Kirim pesan</button></span></div>}<div><Mail /><span><small>Email</small><a href={`mailto:${tenant.email}`}>{v(tenant.email)}</a></span></div><div><IdCard /><span><small>{t("Nomor KTP / identitas")}</small><strong>{v(tenant.nomorIdentitas)}</strong></span></div><div><ShieldCheck /><span><small>{t("Kontak darurat")}</small><strong>{v(tenant.kontakDarurat)}</strong><em>{v(tenant.teleponDarurat)}</em></span></div></div></section>
       <section className="panel tenant-card"><div className="tenant-card-head"><div><h2>{t("Dokumen")}</h2><p>{t("Kontrak dan dokumen identitas")}</p></div></div><div className="identity-document"><img src={String(tenant.gambarIdentitas || "/ktp-placeholder.svg")} alt={`${t("Kartu identitas")} ${tenant.nama}`} /><span><strong>{t("Kartu identitas")}</strong><small>{t("Privat")}</small></span></div><div className="document-list compact-document-list">{documents.map(document => <div className="document-row" key={document.id}><span className="document-type"><FileText /></span><span><strong>{v(document.nama)}</strong><small>{t(String(document.kategori))} · {v(document.diperbarui)}</small></span></div>)}</div></section>
-      <button className="button danger tenant-delete" onClick={() => window.confirm(locale === "en" ? "Delete this tenant record?" : "Hapus data penyewa ini?") && onDelete()}><Trash2 />{t("Hapus penyewa")}</button>
+      <button className="button danger tenant-delete" onClick={async () => { if (await confirm({ title: locale === "en" ? "Delete this tenant record?" : "Hapus data penyewa ini?", description: locale === "en" ? "This removes the tenant and cannot be undone." : "Data penyewa akan dihapus dan tidak dapat dikembalikan.", confirmLabel: locale === "en" ? "Delete" : "Hapus", cancelLabel: locale === "en" ? "Cancel" : "Batal", danger: true })) onDelete(); }}><Trash2 />{t("Hapus penyewa")}</button>
     </aside></div>
   </>;
 }
@@ -429,8 +427,9 @@ type TicketDragPreviewState = { row: Row; x: number; y: number; width: number; h
 
 
 function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+  const confirm = useConfirm();
   const { locale, t, v } = useI18n();
-  const [vendors, setVendors] = useStoredRows("vendors", vendorDirectory);
+  const [vendors, setVendors] = useDbRows("vendors");
   const [tab, setTab] = useState<"board" | "vendors">("board");
   const [search, setSearch] = useState("");
   const [dragged, setDragged] = useState<string | null>(null);
@@ -583,8 +582,15 @@ function MaintenancePage({ rows, setRows, openDialog, notify }: { rows: Row[]; s
     updateTicket(row.id, { labels: labels.includes(label) ? labels.filter(item => item !== label).join("|") : [...labels, label].join("|") });
     setMenu(current => current ? { ...current, row: { ...current.row, labels: labels.includes(label) ? labels.filter(item => item !== label).join("|") : [...labels, label].join("|") } } : null);
   };
-  const removeTicket = (row: Row) => {
-    if (!window.confirm(locale === "en" ? `Delete ${row.tiket}?` : `Hapus ${row.tiket}?`)) return;
+  const removeTicket = async (row: Row) => {
+    const ok = await confirm({
+      title: locale === "en" ? `Delete ${row.tiket}?` : `Hapus ${row.tiket}?`,
+      description: locale === "en" ? "The ticket and its history will be removed." : "Tiket beserta riwayatnya akan dihapus.",
+      confirmLabel: locale === "en" ? "Delete" : "Hapus",
+      cancelLabel: locale === "en" ? "Cancel" : "Batal",
+      danger: true,
+    });
+    if (!ok) return;
     setRows(current => current.filter(item => item.id !== row.id));
     setMenu(null);
     notify(locale === "en" ? "Ticket deleted." : "Tiket dihapus.");
@@ -650,37 +656,78 @@ function TicketDragPreview({ preview }: { preview: Exclude<TicketDragPreviewStat
 }
 
 
-function Dashboard({ go, reservations }: { go: (p: PageId) => void; reservations: Row[] }) {
-  const { t, v } = useI18n();
+function Dashboard({ go, reservations, properties, invoices, tickets, loading, onLoadDemo }: { go: (p: PageId) => void; reservations: Row[]; properties: Row[]; invoices: Row[]; tickets: Row[]; loading: boolean; onLoadDemo: () => void }) {
+  const { locale, t, v } = useI18n();
   const depositMetrics = (typeof window !== "undefined") ? getDepositMetrics() : { held: 0, returnedThisMonth: 0, deducted: 0 };
   const upcoming: [string, string][] = [];
   reservations.filter(r => r.status === "Kontrak Ditandatangani" && r.jadwalMasuk).forEach(r => upcoming.push([`Move-in ${v(r.unit)}`, v(r.jadwalMasuk)]));
   reservations.filter(r => isExpiringSoon(r)).forEach(r => upcoming.push([`${t("Kontrak berakhir")} · ${v(r.unit)}`, v(reservationEndDate(r.periode) ? fmtShort(reservationEndDate(r.periode)!) : r.periode)]));
-  const activity = [
-    ["Pembayaran diterima", t("Dewi Lestari membayar Rp1.200.000"), "10.23"],
-    ["Kontrak perlu ditandatangani", "M. Iqbal Maulana, Unit 104", "09.15"],
-    ["Tiket baru", "Keran bocor di Unit 103", "Kemarin"],
-  ];
+
+  // KPIs computed from live data — never hardcoded.
+  const totalUnits = properties.reduce((sum, p) => sum + (Number(p.unit) || 0), 0);
+  const occupiedUnits = properties.reduce((sum, p) => sum + (Number(p.terisi) || 0), 0);
+  const occupancy = totalUnits ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+  const billedTotal = invoices.reduce((sum, r) => sum + parseRp(r.total as string | number), 0);
+  const outstanding = invoices.reduce((sum, r) => sum + (r.status === "Lunas" ? 0 : parseRp(r.sisa as string | number)), 0);
+  const collected = billedTotal - outstanding;
+  const collectedPct = billedTotal ? Math.round((collected / billedTotal) * 100) : 0;
+  const unpaidCount = invoices.filter(r => r.status !== "Lunas" && parseRp(r.sisa as string | number) > 0).length;
+  const openTickets = tickets.filter(r => r.status !== "Selesai");
+  const assignedTickets = openTickets.filter(r => r.status === "Ditugaskan" || r.status === "Dikerjakan");
+
+  const activity: [string, string, string][] = [
+    ...invoices.filter(r => r.status === "Terlambat").slice(0, 2).map(r =>
+      [t("Tagihan terlambat"), `${v(r.penyewa)} · ${v(r.unit)} · ${v(r.sisa)}`, v(r.jatuhTempo)] as [string, string, string]),
+    ...tickets.filter(r => r.status === "Baru").slice(0, 2).map(r =>
+      [t("Tiket baru"), `${v(r.judul)} · ${v(r.unit)}`, ""] as [string, string, string]),
+    ...reservations.filter(r => r.status === "Draf Kontrak").slice(0, 1).map(r =>
+      [t("Kontrak perlu ditandatangani"), `${v(r.penyewa)} · ${v(r.unit)}`, ""] as [string, string, string]),
+  ].slice(0, 4);
+
+  if (!loading && properties.length === 0) {
+    return <>
+      <PageHead page="dashboard" />
+      <section className="panel onboarding-panel">
+        <div className="panel-head"><div>
+          <h2>{locale === "en" ? "Welcome to Sewain" : "Selamat datang di Sewain"}</h2>
+          <p>{locale === "en" ? "Set up your rental operation in a few steps." : "Siapkan operasional sewa Anda dalam beberapa langkah."}</p>
+        </div></div>
+        <ol className="onboarding-steps">
+          <li><button className="text-button" onClick={() => go("properties")}>{locale === "en" ? "Add your first property and its units" : "Tambahkan properti pertama beserta unitnya"}</button></li>
+          <li><button className="text-button" onClick={() => go("tenants")}>{locale === "en" ? "Register a tenant" : "Daftarkan penyewa"}</button></li>
+          <li><button className="text-button" onClick={() => go("reservations")}>{locale === "en" ? "Create a booking and contract" : "Buat reservasi dan kontrak"}</button></li>
+          <li><button className="text-button" onClick={() => go("invoices")}>{locale === "en" ? "Track invoices and payments" : "Pantau tagihan dan pembayaran"}</button></li>
+        </ol>
+        <div className="actions">
+          <button className="button primary" onClick={() => go("properties")}>{locale === "en" ? "Add property" : "Tambah properti"}</button>
+          <button className="button" onClick={onLoadDemo}>{locale === "en" ? "Load sample data" : "Muat data contoh"}</button>
+        </div>
+      </section>
+    </>;
+  }
+
   return <>
     <PageHead page="dashboard" />
     <div className="stats-strip">
-      <div className="stat"><span>{t("Tingkat hunian")}</span><strong>75%</strong><small>{t("+4% bulan ini")}</small></div>
-      <div className="stat"><span>{t("Tagihan diterima")}</span><strong>{v("Rp42,8 jt")}</strong><small>{t("89% tertagih")}</small></div>
-      <div className="stat"><span>{t("Perlu ditagih")}</span><strong>{v("Rp8,4 jt")}</strong><small style={{ color: "var(--danger)" }}>{t("6 tagihan")}</small></div>
-      <div className="stat"><span>{t("Tiket terbuka")}</span><strong>4</strong><small>{t("2 ditugaskan")}</small></div>
+      <div className="stat"><span>{t("Tingkat hunian")}</span><strong>{loading ? "–" : `${occupancy}%`}</strong><small>{occupiedUnits}/{totalUnits} {locale === "en" ? "units" : "unit"}</small></div>
+      <div className="stat"><span>{t("Tagihan diterima")}</span><strong>{v(formatRp(collected))}</strong><small>{collectedPct}% {locale === "en" ? "collected" : "tertagih"}</small></div>
+      <div className="stat"><span>{t("Perlu ditagih")}</span><strong>{v(formatRp(outstanding))}</strong><small style={outstanding > 0 ? { color: "var(--danger)" } : undefined}>{unpaidCount} {locale === "en" ? "invoices" : "tagihan"}</small></div>
+      <div className="stat"><span>{t("Tiket terbuka")}</span><strong>{openTickets.length}</strong><small>{assignedTickets.length} {locale === "en" ? "assigned" : "ditugaskan"}</small></div>
       <div className="stat"><span>{t("Deposit dikelola")}</span><strong>{v(formatRp(depositMetrics.held || 0))}</strong><small>{t("Total deposit")}</small></div>
     </div>
     <div className="split dashboard-split">
       <div>
         <section className="panel"><div className="panel-head"><div><h2>{t("Portofolio properti")}</h2><p>{t("Hunian dan pendapatan bulan berjalan")}</p></div><button className="button" onClick={() => go("properties")}>{t("Lihat properti")}</button></div>
-          <DataTable rows={seedProperties.slice(0, 4)} onEdit={() => go("properties")} onDelete={() => go("properties")} onSelect={() => go("properties")} />
+          <DataTable rows={properties.slice(0, 4)} loading={loading} onEdit={() => go("properties")} onDelete={() => go("properties")} onSelect={() => go("properties")} />
         </section>
         <section className="panel"><div className="panel-head"><div><h2>{t("Tagihan perlu tindakan")}</h2><p>{t("Urut berdasarkan keterlambatan")}</p></div><button className="button primary" onClick={() => go("invoices")}>{t("Buka tagihan")}</button></div>
-          <DataTable rows={seedInvoices.filter(r => r.status !== "Lunas").slice(0, 4)} onEdit={() => go("invoices")} onDelete={() => go("invoices")} />
+          {invoices.some(r => r.status !== "Lunas") || loading
+            ? <DataTable rows={invoices.filter(r => r.status !== "Lunas").slice(0, 4)} loading={loading} onEdit={() => go("invoices")} onDelete={() => go("invoices")} />
+            : <div className="inline-empty">{locale === "en" ? "No outstanding invoices." : "Tidak ada tagihan tertunda."}</div>}
         </section>
       </div>
-      <aside className="detail-pane"><div className="panel-head"><div><h2>{t("Aktivitas terbaru")}</h2><p>{t("Hari ini")}</p></div></div><div className="detail-section">
-        {activity.map(([title, desc, time]) => <div className="activity" key={title}><span className="activity-icon"><Check /></span><span><strong>{t(title)}</strong><span className="cell-sub">{t(desc)}</span></span><time>{t(time)}</time></div>)}
+      <aside className="detail-pane"><div className="panel-head"><div><h2>{t("Aktivitas terbaru")}</h2><p>{t("Perlu ditindaklanjuti")}</p></div></div><div className="detail-section">
+        {activity.length ? activity.map(([title, desc, time], i) => <div className="activity" key={`${title}-${i}`}><span className="activity-icon"><Check /></span><span><strong>{title}</strong><span className="cell-sub">{desc}</span></span>{time && <time>{time}</time>}</div>) : <div className="inline-empty">{locale === "en" ? "Nothing needs attention right now." : "Tidak ada yang perlu ditindaklanjuti saat ini."}</div>}
       </div><div className="detail-section"><div className="detail-title">{t("Jadwal mendatang")}<button className="text-button" style={{ marginLeft: "auto" }} onClick={() => go("reservations")}>{t("Reservasi")}</button></div>{upcoming.length ? <div className="detail-grid">{upcoming.map(([label, when], i) => <Fragment key={i}><span>{label}</span><span>{when}</span></Fragment>)}</div> : <div className="inline-empty">{t("Tidak ada jadwal mendatang.")}</div>}</div></aside>
     </div>
   </>;
@@ -729,6 +776,7 @@ function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onB
 }
 
 function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, onBook, onViewReservations, onBack, openDialog, notify }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+  const confirm = useConfirm();
   const { locale, t, v } = useI18n();
   const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
   const propertyUnits = unitsForProperty(units, property);
@@ -816,12 +864,19 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
     setUnitForm(form => ({ ...form, lantai: form.lantai === group ? name : form.lantai }));
     notify(locale === "en" ? "Unit group renamed." : "Group unit diubah.");
   };
-  const handleDeleteGroup = (group: string, groupUnits: Row[]) => {
+  const handleDeleteGroup = async (group: string, groupUnits: Row[]) => {
     const label = unitGroupLabel(group, t, v);
     const messageText = groupUnits.length
       ? (locale === "en" ? `Delete ${label} and ${groupUnits.length} units inside it?` : `Hapus ${label} dan ${groupUnits.length} unit di dalamnya?`)
       : (locale === "en" ? `Delete ${label}?` : `Hapus ${label}?`);
-    if (!window.confirm(messageText)) return;
+    const ok = await confirm({
+      title: messageText,
+      description: locale === "en" ? "Deleted units cannot be recovered." : "Unit yang dihapus tidak dapat dikembalikan.",
+      confirmLabel: locale === "en" ? "Delete" : "Hapus",
+      cancelLabel: locale === "en" ? "Cancel" : "Batal",
+      danger: true,
+    });
+    if (!ok) return;
     const deletedIds = new Set(groupUnits.map(row => row.id));
     setUnits(old => old.filter(row => !deletedIds.has(row.id)));
     const nextGroups = unitGroupNames.filter(item => item !== group);
@@ -1117,9 +1172,23 @@ function GenericEditDialog({ state, onClose, onSave }: { state: Exclude<DialogSt
     const value = state.row?.[field.key] ?? "";
     return [field.key, field.type === "date" ? toDateInputValue(value) : String(value)];
   })));
-  const submit = (e: React.FormEvent) => { e.preventDefault(); onSave(state.page, { id: state.row?.id || `${state.page}-${Date.now()}`, ...values }); };
-  const update = (key: string, value: string) => setValues(current => ({ ...current, [key]: value }));
-  return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}><form className="dialog" onSubmit={submit} role="dialog" aria-modal="true"><div className="dialog-head"><div><h2>{t(state.mode === "create" ? "Tambah" : "Edit")} {t(pageMeta[state.page].singular)}</h2><p>{locale === "en" ? "Changes are saved automatically on this device." : "Perubahan disimpan otomatis di perangkat ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div><div className="dialog-body"><div className="form-grid">{schema.map((field, i) => <div className={`form-field ${(field.multiline || (i === schema.length - 1 && schema.length % 2)) ? "full" : ""}`} key={field.key}><label htmlFor={field.key}>{t(field.label)}</label>{field.options ? <select id={field.key} value={values[field.key]} required onChange={e => update(field.key, e.target.value)}><option value="">{t("Pilih")} {t(field.label).toLowerCase()}</option>{field.options.map(o => <option key={o} value={o}>{t(o)}</option>)}</select> : field.multiline ? <textarea id={field.key} rows={5} value={values[field.key]} required onChange={e => update(field.key, e.target.value)} /> : <input id={field.key} type={field.type || "text"} inputMode={field.inputMode} value={values[field.key]} required onChange={e => update(field.key, e.target.value)} />}</div>)}</div></div><div className="dialog-actions"><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button className="button primary" type="submit">{t(state.mode === "create" ? "Tambahkan" : "Simpan perubahan")}</button></div></form></div>;
+  const [error, setError] = useState("");
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    for (const field of schema) {
+      const value = (values[field.key] ?? "").trim();
+      if (!value) {
+        return setError(locale === "en" ? `"${t(field.label)}" is required.` : `"${t(field.label)}" wajib diisi.`);
+      }
+      if (field.inputMode === "numeric" && !/\d/.test(value)) {
+        return setError(locale === "en" ? `"${t(field.label)}" must contain a number.` : `"${t(field.label)}" harus berupa angka.`);
+      }
+    }
+    setError("");
+    onSave(state.page, { id: state.row?.id || `${state.page}-${Date.now()}`, ...values });
+  };
+  const update = (key: string, value: string) => { setValues(current => ({ ...current, [key]: value })); setError(""); };
+  return <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}><form className="dialog" onSubmit={submit} role="dialog" aria-modal="true"><div className="dialog-head"><div><h2>{t(state.mode === "create" ? "Tambah" : "Edit")} {t(pageMeta[state.page].singular)}</h2><p>{locale === "en" ? "Saved to your workspace." : "Tersimpan di workspace Anda."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={onClose}><X /></button></div><div className="dialog-body"><div className="form-grid">{schema.map((field, i) => <div className={`form-field ${(field.multiline || (i === schema.length - 1 && schema.length % 2)) ? "full" : ""}`} key={field.key}><label htmlFor={field.key}>{t(field.label)}</label>{field.options ? <select id={field.key} value={values[field.key]} required onChange={e => update(field.key, e.target.value)}><option value="">{t("Pilih")} {t(field.label).toLowerCase()}</option>{field.options.map(o => <option key={o} value={o}>{t(o)}</option>)}</select> : field.multiline ? <textarea id={field.key} rows={5} value={values[field.key]} required onChange={e => update(field.key, e.target.value)} /> : <input id={field.key} type={field.type || "text"} inputMode={field.inputMode} value={values[field.key]} required onChange={e => update(field.key, e.target.value)} />}</div>)}</div>{error && <p className="form-error" role="alert">{error}</p>}</div><div className="dialog-actions"><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button className="button primary" type="submit">{t(state.mode === "create" ? "Tambahkan" : "Simpan perubahan")}</button></div></form></div>;
 }
 
 export function TenantDialog({ state, onClose, onSave }: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
@@ -1304,41 +1373,6 @@ function EditDialog(props: { state: Exclude<DialogState, null>; onClose: () => v
   return props.state.page === "properties" ? <PropertyDialog {...props} /> : props.state.page === "tenants" ? <TenantDialog {...props} /> : props.state.page === "tickets" ? <TicketDialog {...props} /> : props.state.page === "tokens" ? <TokenOrderDialog {...props} /> : <GenericEditDialog {...props} />;
 }
 
-type CalendarEventKind = "payment" | "maintenance" | "contract" | "move";
-type CalendarEvent = {
-  id: string;
-  date: string;
-  title: string;
-  titleEn: string;
-  detail: string;
-  kind: CalendarEventKind;
-  target: PageId;
-  status: "ongoing" | "upcoming";
-  time?: string;
-};
-
-const calendarEvents: CalendarEvent[] = [
-  { id: "cal-1", date: "2026-06-22", title: "Perbaikan pipa bocor", titleEn: "Leaking pipe repair", detail: "Kost Menteng Indah · Unit 109", kind: "maintenance", target: "tickets", status: "ongoing", time: "09.00–12.00" },
-  { id: "cal-2", date: "2026-06-22", title: "8 tagihan jatuh tempo", titleEn: "8 invoices due", detail: "3 properti · Rp9.600.000", kind: "payment", target: "invoices", status: "ongoing", time: "Hari ini" },
-  { id: "cal-3", date: "2026-06-24", title: "Kunjungan teknisi AC", titleEn: "AC technician visit", detail: "Villa Bintaro Residence · Unit 204", kind: "maintenance", target: "tickets", status: "upcoming", time: "10.30" },
-  { id: "cal-4", date: "2026-06-25", title: "Pengingat pembayaran", titleEn: "Payment reminder", detail: "12 penyewa belum membayar", kind: "payment", target: "invoices", status: "upcoming", time: "08.00" },
-  { id: "cal-5", date: "2026-06-26", title: "Serah terima unit", titleEn: "Unit handover", detail: "Apartemen Setiabudi · Unit A-18", kind: "move", target: "reservations", status: "upcoming", time: "14.00" },
-  { id: "cal-6", date: "2026-06-28", title: "3 kontrak berakhir", titleEn: "3 contracts expire", detail: "Perlu keputusan perpanjangan", kind: "contract", target: "contracts", status: "upcoming" },
-  { id: "cal-7", date: "2026-07-01", title: "Tagihan sewa diterbitkan", titleEn: "Rent invoices issued", detail: "Seluruh penyewa aktif", kind: "payment", target: "invoices", status: "upcoming", time: "Otomatis" },
-  { id: "cal-8", date: "2026-07-03", title: "Inspeksi unit keluar", titleEn: "Move-out inspection", detail: "Kos Melati · Unit 104", kind: "move", target: "reservations", status: "upcoming", time: "13.00" },
-];
-
-const calendarKindMeta: Record<CalendarEventKind, { label: string; labelEn: string; icon: typeof CalendarDays }> = {
-  payment: { label: "Pembayaran", labelEn: "Payment", icon: CircleDollarSign },
-  maintenance: { label: "Pemeliharaan", labelEn: "Maintenance", icon: Wrench },
-  contract: { label: "Kontrak", labelEn: "Contract", icon: FileType2 },
-  move: { label: "Masuk / keluar", labelEn: "Move in / out", icon: UserCheck },
-};
-
-const calendarDateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
-
-
 function SewainContent() {
   const { locale, setLocale, t } = useI18n();
   const [page, setPage] = useState<PageId>("dashboard");
@@ -1354,20 +1388,20 @@ function SewainContent() {
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [actingAsOpen, setActingAsOpen] = useState(false);
   const actingAsRef = useRef<HTMLDivElement>(null);
-  const [propertyRows, setPropertyRows] = useStoredRows("properties", seedProperties);
+  const [propertyRows, setPropertyRows, propertiesLoading] = useDbRows("properties");
   const [tokenConfig, setTokenConfig] = useStoredConfig<TokenConfig>("token-config", defaultTokenConfig);
-  const [invoiceRows, setInvoiceRows] = useStoredRows("invoices", seedInvoices);
-  const [tenants, setTenants] = useStoredRows("tenants", moduleData.tenants);
-  const [reservations, setReservations] = useStoredRows("reservations", moduleData.reservations);
-  const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
-  const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
-  const [expenseRows, setExpenseRows] = useStoredRows("expenses", moduleData.expenses);
+  const [invoiceRows, setInvoiceRows, invoicesLoading] = useDbRows("invoices");
+  const [tenants, setTenants, tenantsLoading] = useDbRows("tenants");
+  const [reservations, setReservations, reservationsLoading] = useDbRows("reservations");
+  const [tokens, setTokens] = useDbRows("tokens");
+  const [contracts, setContracts] = useDbRows("contracts");
+  const [expenseRows, setExpenseRows] = useDbRows("expenses");
   const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
   const [contractTemplates, setContractTemplates] = useStoredConfig<ContractTemplate[]>("contract-templates-v1", SEED_CONTRACT_TEMPLATES);
   const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
-  const [tickets, setTickets] = useStoredRows("tickets", moduleData.tickets);
-  const [documents, setDocuments] = useStoredRows("documents", moduleData.documents);
-  const [units, setUnits] = useStoredRows("units", seedUnits);
+  const [tickets, setTickets] = useDbRows("tickets");
+  const [documents, setDocuments] = useDbRows("documents");
+  const [units, setUnits] = useDbRows("units");
   const [roles, setRoles] = useStoredState<Role[]>("roles-v1", SEED_ROLES);
   const [members, setMembers] = useStoredState<Member[]>("members-v1", SEED_MEMBERS);
   const [currentUserId, setCurrentUserId] = useStoredState<string>("current-user-v1", SEED_MEMBERS[0].id);
@@ -1410,8 +1444,35 @@ function SewainContent() {
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", closeOnEscape); };
   }, [actingAsOpen]);
   const stores: Partial<Record<PageId, [Row[], React.Dispatch<React.SetStateAction<Row[]>>]>> = useMemo(() => ({ properties: [propertyRows, setPropertyRows], invoices: [invoiceRows, setInvoiceRows], tenants: [tenants, setTenants], reservations: [reservations, setReservations], tokens: [tokens, setTokens], contracts: [contracts, setContracts], tickets: [tickets, setTickets], documents: [documents, setDocuments] }), [propertyRows, invoiceRows, tenants, reservations, tokens, contracts, tickets, documents, setPropertyRows, setInvoiceRows, setTenants, setReservations, setTokens, setContracts, setTickets, setDocuments]);
+  const notificationItems = useMemo(() => buildNotificationItems(invoiceRows, tickets, contracts), [invoiceRows, tickets, contracts]);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
+  useEffect(() => {
+    const onSyncError = (event: Event) => {
+      const detail = (event as CustomEvent<SyncErrorDetail>).detail;
+      const label = t(pageMeta[detail.module as PageId]?.title ?? detail.module);
+      setToast(detail.kind === "load"
+        ? (locale === "en" ? `Failed to load ${label} data. Refresh to retry.` : `Gagal memuat data ${label}. Muat ulang untuk mencoba lagi.`)
+        : (locale === "en" ? `Failed to save ${label} changes. Check your connection.` : `Gagal menyimpan perubahan ${label}. Periksa koneksi Anda.`));
+      window.setTimeout(() => setToast(""), 5000);
+    };
+    window.addEventListener(SYNC_ERROR_EVENT, onSyncError);
+    return () => window.removeEventListener(SYNC_ERROR_EVENT, onSyncError);
+  }, [locale, t]);
   const go = (id: PageId) => { setPage(id); setMobileNav(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const loadDemoData = () => {
+    // Explicit, user-triggered demo dataset — the hooks persist it to the org.
+    setPropertyRows(seedProperties);
+    setUnits(seedUnits);
+    setInvoiceRows(seedInvoices);
+    setTenants(moduleData.tenants);
+    setReservations(moduleData.reservations);
+    setTokens(moduleData.tokens);
+    setContracts(moduleData.contracts);
+    setExpenseRows(moduleData.expenses);
+    setTickets(moduleData.tickets);
+    setDocuments(moduleData.documents);
+    notify(locale === "en" ? "Sample data loaded" : "Data contoh dimuat");
+  };
   const rememberRead = (ids: string[]) => {
     const next = Array.from(new Set([...readNotifications, ...ids]));
     setReadNotifications(next);
@@ -1461,18 +1522,18 @@ function SewainContent() {
     <Sidebar sidebarCollapsed={sidebarCollapsed} toggleSidebar={toggleSidebar} locale={locale} setLocale={setLocale} page={page} go={go} navAllowed={navAllowed} access={access} t={t} mobileNav={mobileNav} setMobileNav={setMobileNav} />
     <div className="shell"><Topbar toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} t={t} setMobileNav={setMobileNav} page={page} go={go} access={access} setActingAsOpen={setActingAsOpen} actingAsOpen={actingAsOpen} actingAsRef={actingAsRef} locale={locale} notificationsRef={notificationsRef} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} notificationItems={notificationItems} readNotifications={readNotifications} rememberRead={rememberRead} openNotification={openNotification} />
       <main className="main" id="main-content">
-        {page === "dashboard" && <Dashboard go={go} reservations={reservations} />}
-        {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} />}
+        {page === "dashboard" && <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading} onLoadDemo={loadDemoData} />}
+        {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} invoices={invoiceRows} reservations={reservations} tickets={tickets} />}
         {page === "properties" && <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} />}
         {page === "tenants" && <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} />}
-        {page === "invoices" && <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} />}
+        {page === "invoices" && <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} loading={invoicesLoading} />}
         {page === "expenses" && <ExpensesPage rows={expenseRows} setRows={setExpenseRows} properties={propertyRows} openDialog={setDialog} notify={notify} />}
         {page === "reports" && <ReportsPage properties={propertyRows} invoices={invoiceRows} />}
         {page === "tickets" && <MaintenancePage rows={tickets} setRows={setTickets} openDialog={setDialog} notify={notify} />}
         {page === "tokens" && <TokenPage rows={tokens} setRows={setTokens} openDialog={setDialog} notify={notify} />}
         {page === "settings" && <SettingsPage notify={notify} integrationConfig={integrationConfig} setIntegrationConfig={setIntegrationConfig} />}
         {page === "messages" && <MessageTemplatesPage templates={templates} setTemplates={setTemplates} notify={notify} />}
-        {page === "reservations" && <ReservationsPage rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} properties={propertyRows} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} onOpenContract={nomor => { setFocusContractId(nomor); go("contracts"); }} />}
+        {page === "reservations" && <ReservationsPage loading={reservationsLoading} rows={reservations} setRows={setReservations} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} properties={propertyRows} setProperties={setPropertyRows} setContracts={setContracts} setDocuments={setDocuments} setInvoices={setInvoiceRows} notify={notify} focusId={focusReservationId} onClearFocus={() => setFocusReservationId("")} onBook={openBooking} onOpenContract={nomor => { setFocusContractId(nomor); go("contracts"); }} />}
         {page === "contracts" && <ContractsPage contracts={contracts} setContracts={setContracts} templates={contractTemplates} setTemplates={setContractTemplates} reservations={reservations} setReservations={setReservations} tenants={tenants} notify={notify} focusId={focusContractId} onClearFocus={() => setFocusContractId("")} />}
         {page === "documents" && <DocumentsPage rows={documents} setRows={setDocuments} openDialog={setDialog} notify={notify} />}
         {currentStore && !["properties", "tenants", "invoices", "tickets", "tokens", "messages", "reservations", "contracts", "documents"].includes(page) && <CrudPage page={page} rows={currentStore[0]} setRows={currentStore[1]} openDialog={setDialog} notify={notify} />}
@@ -1496,5 +1557,5 @@ export function SewainApp() {
   };
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   const context = useMemo<I18nState>(() => ({ locale, setLocale, t: value => translate(locale, value), v: value => localizeValue(locale, value) }), [locale]);
-  return <I18nContext.Provider value={context}><SewainContent /></I18nContext.Provider>;
+  return <I18nContext.Provider value={context}><ConfirmProvider><SewainContent /></ConfirmProvider></I18nContext.Provider>;
 }

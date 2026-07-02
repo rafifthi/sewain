@@ -1,8 +1,10 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
+import { MODULES, moduleDdl, isModuleName } from "./modules";
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -48,6 +50,15 @@ export async function initDb() {
   const client = createClient(getClientConfig());
 
   await client.execute(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  await client.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -56,10 +67,31 @@ export async function initDb() {
       email_verified INTEGER NOT NULL DEFAULT 0,
       token_version INTEGER NOT NULL DEFAULT 0,
       role_id TEXT NOT NULL DEFAULT 'admin',
+      org_id TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
   `);
+
+  // Existing databases created before org support: add the column, then give
+  // every org-less user their own organization.
+  const userCols = await client.execute(`PRAGMA table_info(users)`);
+  if (!userCols.rows.some((r) => r.name === "org_id")) {
+    await client.execute(`ALTER TABLE users ADD COLUMN org_id TEXT NOT NULL DEFAULT ''`);
+  }
+  const orphans = await client.execute(`SELECT id, name FROM users WHERE org_id = ''`);
+  for (const row of orphans.rows) {
+    const orgId = randomUUID();
+    const now = Date.now();
+    await client.execute({
+      sql: `INSERT INTO organizations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      args: [orgId, `${row.name}'s workspace`, now, now],
+    });
+    await client.execute({
+      sql: `UPDATE users SET org_id = ? WHERE id = ?`,
+      args: [orgId, row.id],
+    });
+  }
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -81,6 +113,13 @@ export async function initDb() {
       created_at INTEGER NOT NULL
     )
   `);
+
+  for (const module of Object.keys(MODULES)) {
+    if (!isModuleName(module)) continue;
+    for (const ddl of moduleDdl(module, module)) {
+      await client.execute(ddl);
+    }
+  }
 
   client.close();
 }
