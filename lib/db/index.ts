@@ -4,24 +4,36 @@ import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+export type Database = ReturnType<typeof drizzle<typeof schema>>;
+
+let _db: Database | null = null;
 
 const DB_PATH = path.join(process.cwd(), ".data", "sewain.db");
 
-function getClientConfig() {
-  const url = process.env.TURSO_DATABASE_URL ?? process.env.LIBSQL_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN ?? process.env.LIBSQL_AUTH_TOKEN;
+function resolveTursoUrl(): { url: string; authToken?: string } | null {
+  const url =
+    process.env.TURSO_DB_URL ??
+    process.env.TURSO_DATABASE_URL ??
+    process.env.LIBSQL_URL;
+  if (!url) return null;
 
-  if (url) {
-    return authToken ? { url, authToken } : { url };
-  }
-
-  ensureDataDir();
-  return { url: `file:${DB_PATH}` };
+  const authToken =
+    process.env.TURSO_DB_AUTH_TOKEN ??
+    process.env.TURSO_AUTH_TOKEN ??
+    process.env.LIBSQL_AUTH_TOKEN;
+  return authToken ? { url, authToken } : { url };
 }
 
 function ensureDataDir() {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
+
+function getClientConfig() {
+  const turso = resolveTursoUrl();
+  if (turso) return turso;
+
+  ensureDataDir();
+  return { url: `file:${DB_PATH}` };
 }
 
 function getDb() {
