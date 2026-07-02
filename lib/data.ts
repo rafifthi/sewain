@@ -19,6 +19,13 @@ export const units: Row[] = [
   { id: "u203", unit: "203", tipe: "Standar", lantai: "2", penyewa: "Dewi Lestari", status: "Dihuni", sewa: "Rp1.200.000", deposit: "Rp1.200.000", tunggakan: "Rp0", meter: "5412 4422 1166", _propertiId: "p1" },
 ];
 
+const now = new Date();
+function expDate(monthOffset: number, day: number): string {
+  const d = new Date(now.getFullYear(), now.getMonth() - monthOffset, day);
+  const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export const moduleData: Record<string, Row[]> = {
   tenants: [
     { id: "t1", nama: "Ahmad Fauzi", telepon: "0812 3456 7890", email: "ahmad.fauzi@email.com", telegram_id: "123456789", telegram_chat_id: "123456789", nomorIdentitas: "3273011203950007", gambarIdentitas: "/ktp-placeholder.svg", kontakDarurat: "Nur Aisyah", teleponDarurat: "0812 9911 2200", unit: "Melati 101", sejak: "1 Mar 2025", periodeSewa: "1 Mar 2025 - 28 Feb 2026", status: "Aktif" },
@@ -48,6 +55,28 @@ export const moduleData: Record<string, Row[]> = {
   documents: [
     { id: "d1", nama: "Kontrak Ahmad Fauzi.pdf", kategori: "Kontrak", terkait: "Ahmad Fauzi", diperbarui: "25 Feb 2025", status: "Terverifikasi" },
     { id: "d2", nama: "KTP Siti Nurhaliza.jpg", kategori: "Identitas", terkait: "Siti Nurhaliza", diperbarui: "10 Feb 2025", status: "Privat" },
+  ],
+  expenses: [
+    { id: "e1", propertiId: "p1", nama: "Tagihan listrik Juni", kategori: "Listrik", jumlah: "Rp1.200.000", tanggal: expDate(0, 15), catatan: "Rekening PLN gedung" },
+    { id: "e2", propertiId: "p1", nama: "Tagihan air Juni", kategori: "Air", jumlah: "Rp450.000", tanggal: expDate(0, 12), catatan: "PDAM" },
+    { id: "e3", propertiId: "p1", nama: "Internet Juni", kategori: "Internet", jumlah: "Rp350.000", tanggal: expDate(0, 10) },
+    { id: "e4", propertiId: "p2", nama: "Tagihan listrik Juni", kategori: "Listrik", jumlah: "Rp890.000", tanggal: expDate(0, 14) },
+    { id: "e5", propertiId: "p2", nama: "Kebersihan Juni", kategori: "Kebersihan", jumlah: "Rp300.000", tanggal: expDate(0, 8) },
+    { id: "e6", propertiId: "p3", nama: "Listrik Ruko Juni", kategori: "Listrik", jumlah: "Rp2.100.000", tanggal: expDate(0, 13), catatan: "PLN" },
+    { id: "e7", propertiId: "p1", nama: "Gaji petugas kebersihan", kategori: "Gaji", jumlah: "Rp1.500.000", tanggal: expDate(1, 28) },
+    { id: "e8", propertiId: "p1", nama: "Perbaikan AC Unit 103", kategori: "Perawatan", jumlah: "Rp750.000", tanggal: expDate(1, 20), catatan: "Ganti freon AC" },
+    { id: "e9", propertiId: "p1", nama: "Tagihan air Mei", kategori: "Air", jumlah: "Rp420.000", tanggal: expDate(1, 12) },
+    { id: "e10", propertiId: "p2", nama: "Gaji satpam", kategori: "Gaji", jumlah: "Rp2.400.000", tanggal: expDate(1, 25) },
+    { id: "e11", propertiId: "p2", nama: "Pajak bumi bangunan", kategori: "Pajak", jumlah: "Rp1.800.000", tanggal: expDate(1, 5) },
+    { id: "e12", propertiId: "p3", nama: "Sampah Juni", kategori: "Sampah", jumlah: "Rp200.000", tanggal: expDate(0, 5) },
+    { id: "e13", propertiId: "p1", nama: "Keamanan Juni", kategori: "Keamanan", jumlah: "Rp600.000", tanggal: expDate(0, 3) },
+    { id: "e14", propertiId: "p1", nama: "Tagihan listrik Mei", kategori: "Listrik", jumlah: "Rp1.150.000", tanggal: expDate(1, 15) },
+    { id: "e15", propertiId: "p2", nama: "Internet Mei", kategori: "Internet", jumlah: "Rp350.000", tanggal: expDate(1, 10) },
+    { id: "e16", propertiId: "p1", nama: "Perawatan taman", kategori: "Perawatan", jumlah: "Rp500.000", tanggal: expDate(2, 18) },
+    { id: "e17", propertiId: "p3", nama: "Listrik Ruko Mei", kategori: "Listrik", jumlah: "Rp1.950.000", tanggal: expDate(1, 13) },
+    { id: "e18", propertiId: "p2", nama: "Kebersihan Mei", kategori: "Kebersihan", jumlah: "Rp300.000", tanggal: expDate(1, 8) },
+    { id: "e19", propertiId: "p3", nama: "Perbaikan AC Ruko", kategori: "Perawatan", jumlah: "Rp900.000", tanggal: expDate(2, 22), catatan: "Service AC lantai 2" },
+    { id: "e20", propertiId: "p3", nama: "Keamanan Ruko", kategori: "Keamanan", jumlah: "Rp1.200.000", tanggal: expDate(0, 1) },
   ],
 };
 

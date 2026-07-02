@@ -23,7 +23,7 @@ import { useAuth } from "@/components/context/auth-context";
 import { initials } from "@/lib/access-control";
 import type { Locale } from "@/lib/i18n";
 
-type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
+type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "expenses" | "reports" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 
 const nav = [
   { id: "dashboard", label: "Ringkasan", icon: Gauge },
@@ -32,6 +32,8 @@ const nav = [
   { id: "tenants", label: "Penyewa", icon: UsersRound },
   { id: "reservations", label: "Reservasi", icon: WalletCards },
   { id: "invoices", label: "Tagihan", icon: CreditCard },
+  { id: "expenses", label: "Pengeluaran", icon: WalletCards },
+  { id: "reports", label: "Laporan Keuangan", icon: FileText },
   { id: "tokens", label: "Token PLN", icon: Zap },
   { id: "contracts", label: "Kontrak", icon: FileType2 },
   { id: "messages", label: "Template Pesan", icon: MessageSquareText },

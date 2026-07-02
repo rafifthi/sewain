@@ -35,8 +35,9 @@ import { ContractsPage } from "@/components/pages/contracts-page";
 import { DocumentsPage } from "@/components/pages/documents-page";
 import { CrudPage } from "@/components/pages/shared";
 import { TicketTimestamps, VendorDetail } from "@/components/pages/tickets-page";
+import { ExpensesPage, ReportsPage } from "@/components/pages";
 
-type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
+type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "expenses" | "reports" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 
 const pageFilterOptions: Record<string, string[]> = {
   documents: ["Semua", "Privat", "Terverifikasi"],
@@ -70,6 +71,8 @@ const pageMeta: Record<PageId, { title: string; description: string; singular: s
   tenants: { title: "Penyewa", description: "Data penyewa aktif, terdahulu, dan yang akan masuk.", singular: "penyewa" },
   reservations: { title: "Reservasi", description: "Lacak status setiap pemesanan dari booking hingga selesai.", singular: "reservasi" },
   invoices: { title: "Tagihan", description: "Buat, kirim, dan rekonsiliasi pembayaran sewa.", singular: "tagihan" },
+  expenses: { title: "Pengeluaran", description: "Catat biaya operasional properti.", singular: "pengeluaran" },
+  reports: { title: "Laporan Keuangan", description: "Pantau pendapatan, biaya, dan laba rugi properti.", singular: "laporan" },
   tokens: { title: "Token PLN", description: "Pesanan token listrik dan margin platform.", singular: "pesanan" },
   contracts: { title: "Kontrak", description: "Template dan kontrak sewa yang sudah dibuat.", singular: "kontrak" },
   messages: { title: "Template Pesan", description: "Pesan WhatsApp otomatis untuk setiap peristiwa.", singular: "template" },
@@ -1358,6 +1361,7 @@ function SewainContent() {
   const [reservations, setReservations] = useStoredRows("reservations", moduleData.reservations);
   const [tokens, setTokens] = useStoredRows("tokens", moduleData.tokens);
   const [contracts, setContracts] = useStoredRows("contracts", moduleData.contracts);
+  const [expenseRows, setExpenseRows] = useStoredRows("expenses", moduleData.expenses);
   const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
   const [contractTemplates, setContractTemplates] = useStoredConfig<ContractTemplate[]>("contract-templates-v1", SEED_CONTRACT_TEMPLATES);
   const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
@@ -1462,6 +1466,8 @@ function SewainContent() {
         {page === "properties" && <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} />}
         {page === "tenants" && <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} />}
         {page === "invoices" && <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} />}
+        {page === "expenses" && <ExpensesPage rows={expenseRows} setRows={setExpenseRows} properties={propertyRows} openDialog={setDialog} notify={notify} />}
+        {page === "reports" && <ReportsPage properties={propertyRows} invoices={invoiceRows} />}
         {page === "tickets" && <MaintenancePage rows={tickets} setRows={setTickets} openDialog={setDialog} notify={notify} />}
         {page === "tokens" && <TokenPage rows={tokens} setRows={setTokens} openDialog={setDialog} notify={notify} />}
         {page === "settings" && <SettingsPage notify={notify} integrationConfig={integrationConfig} setIntegrationConfig={setIntegrationConfig} />}

@@ -10,4 +10,6 @@ export { TokenPage, CrudPage } from "./tokens-page";
 export { InvoicePage } from "./invoices-page";
 export { MaintenancePage } from "./tickets-page";
 export { MessageTemplatesPage } from "./messages-page";
+export { ExpensesPage } from "./expenses-page";
+export { ReportsPage } from "./reports-page";
 export { PageHead, Toolbar, DataTable, Status, pageMeta } from "./shared";
