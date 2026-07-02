@@ -13,7 +13,7 @@ import { useI18n, useAccess } from "@/components/context";
 import { type ModuleId } from "@/lib/access-control";
 import { SkeletonTable } from "@/components/skeleton";
 
-export type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
+export type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "expenses" | "reports" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 
 export const pageFilterOptions: Record<string, string[]> = {
   documents: ["Semua", "Privat", "Terverifikasi"],
@@ -32,6 +32,8 @@ export const pageMeta: Record<PageId, { title: string; description: string; sing
   tenants: { title: "Penyewa", description: "Data penyewa aktif, terdahulu, dan yang akan masuk.", singular: "penyewa" },
   reservations: { title: "Reservasi", description: "Lacak status setiap pemesanan dari booking hingga selesai.", singular: "reservasi" },
   invoices: { title: "Tagihan", description: "Buat, kirim, dan rekonsiliasi pembayaran sewa.", singular: "tagihan" },
+  expenses: { title: "Pengeluaran", description: "Catat biaya operasional properti.", singular: "pengeluaran" },
+  reports: { title: "Laporan Keuangan", description: "Pantau pendapatan, biaya, dan laba rugi.", singular: "laporan" },
   tokens: { title: "Token PLN", description: "Pesanan token listrik dan margin platform.", singular: "pesanan" },
   contracts: { title: "Kontrak", description: "Template dan kontrak sewa yang sudah dibuat.", singular: "kontrak" },
   messages: { title: "Template Pesan", description: "Pesan WhatsApp otomatis untuk setiap peristiwa.", singular: "template" },

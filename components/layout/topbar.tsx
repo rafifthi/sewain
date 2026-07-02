@@ -18,7 +18,7 @@ import { useI18n, type AccessCtx } from "@/components/context";
 import { initials } from "@/lib/access-control";
 import type { Locale } from "@/lib/i18n";
 
-type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
+type PageId = "dashboard" | "calendar" | "properties" | "tenants" | "reservations" | "invoices" | "expenses" | "reports" | "tokens" | "contracts" | "messages" | "tickets" | "documents" | "settings";
 
 type NotificationItem = {
   id: string;
