@@ -4,7 +4,16 @@ import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+export type Database = ReturnType<typeof drizzle<typeof schema>>;
+
+let _db: Database | null = null;
+
+function getClient() {
+  const url =
+    process.env.TURSO_DB_URL || `file:${process.cwd()}/.data/sewain.db`;
+  const authToken = process.env.TURSO_DB_AUTH_TOKEN;
+  return createClient({ url, ...(authToken ? { authToken } : {}) });
+}
 
 const DB_PATH = path.join(process.cwd(), ".data", "sewain.db");
 
@@ -15,9 +24,7 @@ function ensureDataDir() {
 function getDb() {
   if (!_db) {
     ensureDataDir();
-    const client = createClient({
-      url: `file:${DB_PATH}`,
-    });
+    const client = getClient();
     _db = drizzle(client, { schema });
   }
   return _db;
@@ -25,9 +32,7 @@ function getDb() {
 
 export async function initDb() {
   ensureDataDir();
-  const client = createClient({
-    url: `file:${DB_PATH}`,
-  });
+  const client = getClient();
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS users (
