@@ -1,13 +1,22 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import fs from "fs";
+import path from "path";
 import * as schema from "./schema";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
+const DB_PATH = path.join(process.cwd(), ".data", "sewain.db");
+
+function ensureDataDir() {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
+
 function getDb() {
   if (!_db) {
+    ensureDataDir();
     const client = createClient({
-      url: `file:${process.cwd()}/.data/sewain.db`,
+      url: `file:${DB_PATH}`,
     });
     _db = drizzle(client, { schema });
   }
@@ -15,8 +24,9 @@ function getDb() {
 }
 
 export async function initDb() {
+  ensureDataDir();
   const client = createClient({
-    url: `file:${process.cwd()}/.data/sewain.db`,
+    url: `file:${DB_PATH}`,
   });
 
   await client.execute(`
