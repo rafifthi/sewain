@@ -8,26 +8,32 @@ let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 const DB_PATH = path.join(process.cwd(), ".data", "sewain.db");
 
+function getClientConfig() {
+  const url = process.env.TURSO_DATABASE_URL ?? process.env.LIBSQL_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN ?? process.env.LIBSQL_AUTH_TOKEN;
+
+  if (url) {
+    return authToken ? { url, authToken } : { url };
+  }
+
+  ensureDataDir();
+  return { url: `file:${DB_PATH}` };
+}
+
 function ensureDataDir() {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 }
 
 function getDb() {
   if (!_db) {
-    ensureDataDir();
-    const client = createClient({
-      url: `file:${DB_PATH}`,
-    });
+    const client = createClient(getClientConfig());
     _db = drizzle(client, { schema });
   }
   return _db;
 }
 
 export async function initDb() {
-  ensureDataDir();
-  const client = createClient({
-    url: `file:${DB_PATH}`,
-  });
+  const client = createClient(getClientConfig());
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS users (

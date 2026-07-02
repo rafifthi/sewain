@@ -19,10 +19,44 @@ interface AuthContextValue {
   logout: (allDevices?: boolean) => Promise<void>;
 }
 
+interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: AuthUser;
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const ACCESS_TOKEN_KEY = "sewain_access_token";
 const REFRESH_TOKEN_KEY = "sewain_refresh_token";
+
+async function readAuthResponse(res: Response): Promise<AuthResponse> {
+  const text = await res.text();
+  let data: { error?: string; [key: string]: unknown } = {};
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned a non-JSON response (${res.status})`);
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error ?? `Request failed with status ${res.status}`);
+  }
+
+  if (
+    typeof data.accessToken !== "string" ||
+    typeof data.refreshToken !== "string" ||
+    typeof data.user !== "object" ||
+    data.user === null
+  ) {
+    throw new Error("Server returned an invalid auth response");
+  }
+
+  return data as unknown as AuthResponse;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -72,12 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email, password }),
     });
 
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error ?? "Login failed");
-    }
-
-    const data = await res.json();
+    const data = await readAuthResponse(res);
     localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     setAccessToken(data.accessToken);
@@ -91,12 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ name, email, password }),
     });
 
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error ?? "Signup failed");
-    }
-
-    const data = await res.json();
+    const data = await readAuthResponse(res);
     localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     setAccessToken(data.accessToken);
