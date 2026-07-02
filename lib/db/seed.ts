@@ -8,28 +8,41 @@ import { users } from "./schema";
 import path from "path";
 import fs from "fs";
 
-function getClient() {
+const DB_PATH = path.join(process.cwd(), ".data", "sewain.db");
+
+function resolveTursoUrl(): { url: string; authToken?: string } | null {
   const url =
-    process.env.TURSO_DB_URL || `file:${path.join(process.cwd(), ".data", "sewain.db")}`;
-  const authToken = process.env.TURSO_DB_AUTH_TOKEN;
-  return createClient({ url, ...(authToken ? { authToken } : {}) });
+    process.env.TURSO_DB_URL ??
+    process.env.TURSO_DATABASE_URL ??
+    process.env.LIBSQL_URL;
+  if (!url) return null;
+
+  const authToken =
+    process.env.TURSO_DB_AUTH_TOKEN ??
+    process.env.TURSO_AUTH_TOKEN ??
+    process.env.LIBSQL_AUTH_TOKEN;
+  return authToken ? { url, authToken } : { url };
+}
+
+function ensureDataDir() {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
+
+function getClientConfig() {
+  const turso = resolveTursoUrl();
+  if (turso) return turso;
+
+  ensureDataDir();
+  return { url: `file:${DB_PATH}` };
 }
 
 async function seed() {
-  // Ensure local data dir exists if using file db
-  if (!process.env.TURSO_DB_URL) {
-    const dataDir = path.join(process.cwd(), ".data");
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-  }
-
-  const client = getClient();
+  ensureDataDir();
+  const client = createClient(getClientConfig());
   const database = drizzle(client, { schema });
 
-  // Create tables via drizzle-kit push instead for Turso
-  // For local file db, init tables directly
-  if (!process.env.TURSO_DB_URL) {
+  // Only create tables locally — Turso uses drizzle-kit push
+  if (!resolveTursoUrl()) {
     await client.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,

@@ -7,11 +7,22 @@ import path from "node:path";
 const dbPath = path.join(process.cwd(), ".data", "sewain.db");
 const dataDir = path.dirname(dbPath);
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+function getClientConfig() {
+  const url = process.env.TURSO_DATABASE_URL ?? process.env.LIBSQL_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN ?? process.env.LIBSQL_AUTH_TOKEN;
+
+  if (url) {
+    return authToken ? { url, authToken } : { url };
+  }
+
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  return { url: `file:${dbPath}` };
 }
 
-const client = createClient({ url: `file:${dbPath}` });
+const client = createClient(getClientConfig());
 
 await client.execute(`
   CREATE TABLE IF NOT EXISTS users (

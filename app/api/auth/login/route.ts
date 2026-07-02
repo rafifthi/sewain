@@ -16,7 +16,7 @@ async function ensureInit() {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown";
   const rl = checkRateLimit(`login:${ip}`);
   if (!rl.allowed) {
@@ -76,4 +76,13 @@ export async function POST(req: NextRequest) {
       emailVerified: user.email_verified,
     },
   });
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req);
+  } catch (error) {
+    console.error("[auth/login]", error);
+    return NextResponse.json({ error: "Authentication service unavailable" }, { status: 500 });
+  }
 }

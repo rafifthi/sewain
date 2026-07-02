@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowRight, Building2, Lock, Mail, UserRound } from "lucide-react";
 import { useAuth } from "@/components/context/auth-context";
+import { hasFieldErrors, validateSignupForm } from "@/lib/auth/form-validation";
+import type { SignupFieldErrors } from "@/lib/auth/form-validation";
 
 export default function SignupPage() {
   const { signup } = useAuth();
@@ -12,19 +14,34 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<SignupFieldErrors>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function clearFieldError(field: keyof SignupFieldErrors) {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateField(field: keyof SignupFieldErrors) {
+    const nextErrors = validateSignupForm({ name, email, password });
+    setFieldErrors((current) => ({ ...current, [field]: nextErrors[field] }));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (password.length < 8) {
-      setError("Kata sandi minimal 8 karakter");
-      return;
-    }
+    const nextErrors = validateSignupForm({ name, email, password });
+    setFieldErrors(nextErrors);
+    if (hasFieldErrors(nextErrors)) return;
+
     setLoading(true);
     try {
-      await signup(name, email, password);
+      await signup(name.trim(), email.trim(), password);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Pendaftaran gagal");
@@ -83,53 +100,86 @@ export default function SignupPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="auth-form">
+          <form onSubmit={handleSubmit} className="auth-form" noValidate>
             <div className="auth-field">
               <label htmlFor="name">Nama lengkap</label>
-              <div className="auth-input-wrap">
+              <div className={`auth-input-wrap ${fieldErrors.name ? "invalid" : ""}`}>
                 <UserRound aria-hidden="true" />
                 <input
                   id="name"
                   type="text"
-                  required
                   autoComplete="name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onBlur={() => validateField("name")}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setError("");
+                    clearFieldError("name");
+                  }}
                   placeholder="Nama Anda"
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  aria-describedby={fieldErrors.name ? "name-error" : undefined}
                 />
               </div>
+              {fieldErrors.name && (
+                <p id="name-error" className="auth-field-error">
+                  {fieldErrors.name}
+                </p>
+              )}
             </div>
 
             <div className="auth-field">
               <label htmlFor="email">Email</label>
-              <div className="auth-input-wrap">
+              <div className={`auth-input-wrap ${fieldErrors.email ? "invalid" : ""}`}>
                 <Mail aria-hidden="true" />
                 <input
                   id="email"
                   type="email"
-                  required
                   autoComplete="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => validateField("email")}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError("");
+                    clearFieldError("email");
+                  }}
                   placeholder="email@contoh.com"
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={fieldErrors.email ? "email-error" : undefined}
                 />
               </div>
+              {fieldErrors.email && (
+                <p id="email-error" className="auth-field-error">
+                  {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div className="auth-field">
               <label htmlFor="password">Kata sandi</label>
-              <div className="auth-input-wrap">
+              <div className={`auth-input-wrap ${fieldErrors.password ? "invalid" : ""}`}>
                 <Lock aria-hidden="true" />
                 <input
                   id="password"
                   type="password"
-                  required
                   autoComplete="new-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => validateField("password")}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError("");
+                    clearFieldError("password");
+                  }}
                   placeholder="Min. 8 karakter"
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={fieldErrors.password ? "password-error" : undefined}
                 />
               </div>
+              {fieldErrors.password && (
+                <p id="password-error" className="auth-field-error">
+                  {fieldErrors.password}
+                </p>
+              )}
             </div>
 
             <button type="submit" disabled={loading} className="auth-submit">

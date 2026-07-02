@@ -5,21 +5,42 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowRight, Building2, Lock, Mail } from "lucide-react";
 import { useAuth } from "@/components/context/auth-context";
+import { hasFieldErrors, validateLoginForm } from "@/lib/auth/form-validation";
+import type { LoginFieldErrors } from "@/lib/auth/form-validation";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function clearFieldError(field: keyof LoginFieldErrors) {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateField(field: keyof LoginFieldErrors) {
+    const nextErrors = validateLoginForm({ email, password });
+    setFieldErrors((current) => ({ ...current, [field]: nextErrors[field] }));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const nextErrors = validateLoginForm({ email, password });
+    setFieldErrors(nextErrors);
+    if (hasFieldErrors(nextErrors)) return;
+
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal");
@@ -78,37 +99,59 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="auth-form">
+          <form onSubmit={handleSubmit} className="auth-form" noValidate>
             <div className="auth-field">
               <label htmlFor="email">Email</label>
-              <div className="auth-input-wrap">
+              <div className={`auth-input-wrap ${fieldErrors.email ? "invalid" : ""}`}>
                 <Mail aria-hidden="true" />
                 <input
                   id="email"
                   type="email"
-                  required
                   autoComplete="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => validateField("email")}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError("");
+                    clearFieldError("email");
+                  }}
                   placeholder="email@contoh.com"
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={fieldErrors.email ? "email-error" : undefined}
                 />
               </div>
+              {fieldErrors.email && (
+                <p id="email-error" className="auth-field-error">
+                  {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div className="auth-field">
               <label htmlFor="password">Kata sandi</label>
-              <div className="auth-input-wrap">
+              <div className={`auth-input-wrap ${fieldErrors.password ? "invalid" : ""}`}>
                 <Lock aria-hidden="true" />
                 <input
                   id="password"
                   type="password"
-                  required
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => validateField("password")}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError("");
+                    clearFieldError("password");
+                  }}
                   placeholder="Masukkan kata sandi"
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={fieldErrors.password ? "password-error" : undefined}
                 />
               </div>
+              {fieldErrors.password && (
+                <p id="password-error" className="auth-field-error">
+                  {fieldErrors.password}
+                </p>
+              )}
             </div>
 
             <div className="auth-form-row">
