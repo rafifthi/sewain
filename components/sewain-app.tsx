@@ -24,7 +24,7 @@ import {
   CONTRACT_ORG, CONTRACT_PLACEHOLDERS, ContractTemplate, contractValues,
   DEFAULT_CONTRACT_TEMPLATE_ID, findContractTemplate, SEED_CONTRACT_TEMPLATES,
 } from "@/lib/contracts";
-import { Sidebar, Topbar } from "@/components/layout";
+import { Sidebar, Topbar, CommandPalette, type DataPageId } from "@/components/layout";
 import { SkeletonTable } from "@/components/skeleton";
 import { CalendarPage } from "@/components/pages/calendar-page";
 import { InvoicePage } from "@/components/pages/invoices-page";
@@ -1383,6 +1383,7 @@ function SewainContent() {
   const [focusContractId, setFocusContractId] = useState("");
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toast, setToast] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [readNotifications, setReadNotifications] = useState<string[]>([]);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -1417,6 +1418,16 @@ function SewainContent() {
   useEffect(() => {
     setSidebarCollapsed(localStorage.getItem("sewain:sidebar-collapsed") === "true");
     try { setReadNotifications(JSON.parse(localStorage.getItem("sewain:read-notifications") || "[]")); } catch { setReadNotifications([]); }
+  }, []);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen(open => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
   useEffect(() => {
     if (!notificationsOpen) return;
@@ -1491,6 +1502,17 @@ function SewainContent() {
     return !current;
   });
   const openBooking = (ctx: BookingState) => { setBooking(ctx); setMobileNav(false); };
+  // Open a record from the master search: navigate, then focus/open it the same
+  // way notifications do (focusId for reservations/contracts, edit dialog otherwise).
+  const openSearchResult = (target: DataPageId, row: Row) => {
+    go(target);
+    if (target === "reservations") setFocusReservationId(String(row.id));
+    else if (target === "contracts") setFocusContractId(String(row.id));
+    else if (target !== "expenses") setDialog({ mode: "edit", page: target, row });
+  };
+  const searchSources: Partial<Record<DataPageId, Row[]>> = useMemo(() => ({
+    properties: propertyRows, tenants, reservations, invoices: invoiceRows, contracts, tickets, documents, tokens, expenses: expenseRows,
+  }), [propertyRows, tenants, reservations, invoiceRows, contracts, tickets, documents, tokens, expenseRows]);
   const save = (target: PageId, row: Row) => {
     const store = stores[target];
     if (!store) return;
@@ -1516,11 +1538,13 @@ function SewainContent() {
   };
   const currentStore = stores[page];
 
-  const navAllowed = (id: string) => id === "dashboard" || id === "calendar" || access.can(id as ModuleId, "view");
+  // expenses/reports are not part of the permission model (ModuleId) yet, so they
+  // are always viewable — like dashboard and calendar.
+  const navAllowed = (id: string) => ["dashboard", "calendar", "expenses", "reports"].includes(id) || access.can(id as ModuleId, "view");
   return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><AccessContext.Provider value={access}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
     {mobileNav && <button className="mobile-overlay" aria-label={t("Tutup navigasi")} onClick={() => setMobileNav(false)} />}
     <Sidebar sidebarCollapsed={sidebarCollapsed} toggleSidebar={toggleSidebar} locale={locale} setLocale={setLocale} page={page} go={go} navAllowed={navAllowed} access={access} t={t} mobileNav={mobileNav} setMobileNav={setMobileNav} />
-    <div className="shell"><Topbar toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} t={t} setMobileNav={setMobileNav} page={page} go={go} access={access} setActingAsOpen={setActingAsOpen} actingAsOpen={actingAsOpen} actingAsRef={actingAsRef} locale={locale} notificationsRef={notificationsRef} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} notificationItems={notificationItems} readNotifications={readNotifications} rememberRead={rememberRead} openNotification={openNotification} />
+    <div className="shell"><Topbar toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} t={t} setMobileNav={setMobileNav} page={page} go={go} access={access} setActingAsOpen={setActingAsOpen} actingAsOpen={actingAsOpen} actingAsRef={actingAsRef} locale={locale} notificationsRef={notificationsRef} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} notificationItems={notificationItems} readNotifications={readNotifications} rememberRead={rememberRead} openNotification={openNotification} onOpenSearch={() => setPaletteOpen(true)} />
       <main className="main" id="main-content">
         {page === "dashboard" && <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading} onLoadDemo={loadDemoData} />}
         {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} invoices={invoiceRows} reservations={reservations} tickets={tickets} />}
@@ -1539,6 +1563,7 @@ function SewainContent() {
         {currentStore && !["properties", "tenants", "invoices", "tickets", "tokens", "messages", "reservations", "contracts", "documents"].includes(page) && <CrudPage page={page} rows={currentStore[0]} setRows={currentStore[1]} openDialog={setDialog} notify={notify} />}
       </main>
     </div>
+    <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} page={page} navAllowed={navAllowed} canCreate={module => access.can(module, "create")} go={go} openDialog={setDialog} openBooking={openBooking} openRecord={openSearchResult} sources={searchSources} />
     {dialog && <EditDialog state={dialog} onClose={() => setDialog(null)} onSave={save} />}
     {booking && <BookingDialog ctx={booking} properties={propertyRows} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} setReservations={setReservations} onClose={() => setBooking(null)} onCreated={id => { setFocusReservationId(id); go("reservations"); }} notify={notify} />}
     {toast && <div className="toast" role="status"><CheckCircle2 />{toast}</div>}
