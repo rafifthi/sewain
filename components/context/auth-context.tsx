@@ -12,27 +12,17 @@ interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null;
-  accessToken: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: (allDevices?: boolean) => Promise<void>;
 }
 
-interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: AuthUser;
-}
-
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const ACCESS_TOKEN_KEY = "sewain_access_token";
-const REFRESH_TOKEN_KEY = "sewain_refresh_token";
-
-async function readAuthResponse(res: Response): Promise<AuthResponse> {
+async function readUserResponse(res: Response): Promise<AuthUser> {
   const text = await res.text();
-  let data: { error?: string; [key: string]: unknown } = {};
+  let data: { error?: string; user?: AuthUser } = {};
 
   if (text) {
     try {
@@ -46,58 +36,46 @@ async function readAuthResponse(res: Response): Promise<AuthResponse> {
     throw new Error(data.error ?? `Request failed with status ${res.status}`);
   }
 
-  if (
-    typeof data.accessToken !== "string" ||
-    typeof data.refreshToken !== "string" ||
-    typeof data.user !== "object" ||
-    data.user === null
-  ) {
+  if (typeof data.user !== "object" || data.user === null) {
     throw new Error("Server returned an invalid auth response");
   }
 
-  return data as unknown as AuthResponse;
+  return data.user;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const clearAuth = useCallback(() => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    setUser(null);
-    setAccessToken(null);
-  }, []);
-
-  const fetchMe = useCallback(async (token: string): Promise<AuthUser | null> => {
-    try {
-      const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return null;
-      return res.json();
-    } catch {
-      return null;
-    }
-  }, []);
-
   useEffect(() => {
-    const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (!stored) {
-      setIsLoading(false);
-      return;
-    }
-    fetchMe(stored).then((u) => {
-      if (u) {
-        setUser(u);
-        setAccessToken(stored);
-      } else {
-        clearAuth();
+    let cancelled = false;
+
+    async function restoreSession() {
+      try {
+        const me = await fetch("/api/auth/me");
+        if (me.ok) {
+          const u = await me.json();
+          if (!cancelled) setUser(u);
+          return;
+        }
+        // Access token expired — try to rotate the refresh token.
+        const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
+        if (refreshed.ok) {
+          const data = await refreshed.json();
+          if (!cancelled && data.user) setUser(data.user);
+        }
+      } catch {
+        // Network failure: leave user logged out; guard will redirect.
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-      setIsLoading(false);
-    });
-  }, [fetchMe, clearAuth]);
+    }
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch("/api/auth/login", {
@@ -106,11 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await readAuthResponse(res);
-    localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-    setAccessToken(data.accessToken);
-    setUser(data.user);
+    setUser(await readUserResponse(res));
   }, []);
 
   const signup = useCallback(async (name: string, email: string, password: string) => {
@@ -120,30 +94,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ name, email, password }),
     });
 
-    const data = await readAuthResponse(res);
-    localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-    setAccessToken(data.accessToken);
-    setUser(data.user);
+    setUser(await readUserResponse(res));
   }, []);
 
-  const logout = useCallback(
-    async (allDevices = false) => {
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (refreshToken) {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken, allDevices }),
-        }).catch(() => {});
-      }
-      clearAuth();
-    },
-    [clearAuth]
-  );
+  const logout = useCallback(async (allDevices = false) => {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ allDevices }),
+    }).catch(() => {});
+    setUser(null);
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

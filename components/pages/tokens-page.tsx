@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, ClipboardList, Pencil, Plus, Search, Settings, Trash2, X } from "lucide-react";
 import { Row } from "@/lib/data";
-import { useI18n, useTokenConfig } from "@/components/context";
+import { useI18n, useTokenConfig, useConfirm } from "@/components/context";
 import { formatRp, defaultTokenConfig, calcFee, type TokenConfig } from "@/lib/utility-token-config";
 import { PageHead, Toolbar, DataTable, CrudPage, type PageId } from "./shared";
 import { SkeletonTable } from "@/components/skeleton";
@@ -73,6 +73,7 @@ function FeeConfigDialog({ onClose }: { onClose: () => void }) {
 
 export function TokenPage({ rows, setRows, openDialog, notify, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: null | { mode: "create" | "edit"; page: PageId; row?: Row }) => void; notify: (s: string) => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
+  const confirm = useConfirm();
   const [selected, setSelected] = useState<Row | null>(rows[0] ?? null);
   const [search, setSearch] = useState("");
   const [feeDialog, setFeeDialog] = useState(false);
@@ -88,8 +89,14 @@ export function TokenPage({ rows, setRows, openDialog, notify, loading = false }
     notify(locale === "en" ? `Order moved to ${nextStatus}.` : `Status diubah ke ${nextStatus}.`);
   };
 
-  const remove = (row: Row) => {
-    if (!window.confirm(locale === "en" ? "Delete this order?" : "Hapus pesanan ini?")) return;
+  const remove = async (row: Row) => {
+    const ok = await confirm({
+      title: locale === "en" ? "Delete this order?" : "Hapus pesanan ini?",
+      confirmLabel: locale === "en" ? "Delete" : "Hapus",
+      cancelLabel: locale === "en" ? "Cancel" : "Batal",
+      danger: true,
+    });
+    if (!ok) return;
     setRows(old => old.filter(r => r.id !== row.id));
     if (selected?.id === row.id) setSelected(filtered.find(r => r.id !== row.id) ?? null);
     notify(locale === "en" ? "Order deleted." : "Pesanan dihapus.");

@@ -1354,3 +1354,9 @@ tbody tr.selected { background: var(--primary-soft); }
   .signature-btn { display: none !important; }
   @page { margin: 18mm; }
 }
+
+/* First-run onboarding (empty organization) */
+.onboarding-panel { max-width: 560px; margin: 32px auto; padding: 28px; }
+.onboarding-steps { margin: 18px 0 24px; padding-left: 24px; display: grid; gap: 12px; }
+.onboarding-steps li::marker { color: var(--primary); font-weight: 600; }
+.onboarding-steps .text-button { font-size: 0.95rem; }

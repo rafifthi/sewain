@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { createHash, randomUUID } from "crypto";
 import { db, initDb } from "@/lib/db";
-import { users, refresh_tokens } from "@/lib/db/schema";
-import { generateAccessToken, generateRefreshToken } from "@/lib/auth/jwt";
+import { users } from "@/lib/db/schema";
+import { issueSession, toPublicUser } from "@/lib/auth/issue";
 import { checkRateLimit } from "@/lib/auth/rate-limit";
 
 let initialized = false;
@@ -51,31 +50,7 @@ async function handlePost(req: NextRequest) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const accessToken = await generateAccessToken(user);
-  const refreshToken = await generateRefreshToken(user);
-  const tokenHash = createHash("sha256").update(refreshToken).digest("hex");
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  await db().insert(refresh_tokens).values({
-    id: randomUUID(),
-    user_id: user.id,
-    token_hash: tokenHash,
-    expires_at: expiresAt,
-    created_at: now,
-  });
-
-  return NextResponse.json({
-    accessToken,
-    refreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      roleId: user.role_id,
-      emailVerified: user.email_verified,
-    },
-  });
+  return issueSession(user, { user: toPublicUser(user) });
 }
 
 export async function POST(req: NextRequest) {
