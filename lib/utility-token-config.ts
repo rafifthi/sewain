@@ -26,3 +26,11 @@ export function calcFee(nominal: number, rule: PropertyFeeRule | undefined): num
 export function formatRp(amount: number): string {
   return `Rp${amount.toLocaleString("id-ID")}`;
 }
+
+/** "Rp1.200.000" | "1200000" | 1200000 → 1200000; anything unparsable → 0. */
+export function parseRp(value: string | number | undefined): number {
+  if (typeof value === "number") return Math.round(value);
+  if (!value) return 0;
+  const digits = value.replace(/[^0-9]/g, "");
+  return digits ? parseInt(digits, 10) : 0;
+}

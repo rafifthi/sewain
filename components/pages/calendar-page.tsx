@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, FileType2, UserCheck, Wrench, Check } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, FileType2, UserCheck, Wrench } from "lucide-react";
 import { useI18n } from "@/components/context";
+import type { Row } from "@/lib/data";
 import type { PageId } from "./shared";
 
 type CalendarEventKind = "payment" | "maintenance" | "contract" | "move";
@@ -18,16 +19,52 @@ type CalendarEvent = {
   time?: string;
 };
 
-const calendarEvents: CalendarEvent[] = [
-  { id: "cal-1", date: "2026-06-22", title: "Perbaikan pipa bocor", titleEn: "Leaking pipe repair", detail: "Kost Menteng Indah · Unit 109", kind: "maintenance", target: "tickets", status: "ongoing", time: "09.00–12.00" },
-  { id: "cal-2", date: "2026-06-22", title: "8 tagihan jatuh tempo", titleEn: "8 invoices due", detail: "3 properti · Rp9.600.000", kind: "payment", target: "invoices", status: "ongoing", time: "Hari ini" },
-  { id: "cal-3", date: "2026-06-24", title: "Kunjungan teknisi AC", titleEn: "AC technician visit", detail: "Villa Bintaro Residence · Unit 204", kind: "maintenance", target: "tickets", status: "upcoming", time: "10.30" },
-  { id: "cal-4", date: "2026-06-25", title: "Pengingat pembayaran", titleEn: "Payment reminder", detail: "12 penyewa belum membayar", kind: "payment", target: "invoices", status: "upcoming", time: "08.00" },
-  { id: "cal-5", date: "2026-06-26", title: "Serah terima unit", titleEn: "Unit handover", detail: "Apartemen Setiabudi · Unit A-18", kind: "move", target: "reservations", status: "upcoming", time: "14.00" },
-  { id: "cal-6", date: "2026-06-28", title: "3 kontrak berakhir", titleEn: "3 contracts expire", detail: "Perlu keputusan perpanjangan", kind: "contract", target: "contracts", status: "upcoming" },
-  { id: "cal-7", date: "2026-07-01", title: "Tagihan sewa diterbitkan", titleEn: "Rent invoices issued", detail: "Seluruh penyewa aktif", kind: "payment", target: "invoices", status: "upcoming", time: "Otomatis" },
-  { id: "cal-8", date: "2026-07-03", title: "Inspeksi unit keluar", titleEn: "Move-out inspection", detail: "Kos Melati · Unit 104", kind: "move", target: "reservations", status: "upcoming", time: "13.00" },
-];
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, may: 4, jun: 5, jul: 6,
+  agu: 7, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, des: 11, dec: 11,
+};
+
+/** Parses ISO strings and Indonesian display dates ("5 Jun 2025") to yyyy-mm-dd. */
+function toDateKey(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const match = raw.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if (!match) return null;
+  const monthKey = match[2].slice(0, 3).toLowerCase();
+  const month = MONTH_INDEX[monthKey];
+  if (month === undefined) return null;
+  return `${match[3]}-${String(month + 1).padStart(2, "0")}-${String(Number(match[1])).padStart(2, "0")}`;
+}
+
+/** Derives calendar events from the org's live data — nothing fabricated. */
+function buildCalendarEvents(invoices: Row[], reservations: Row[], tickets: Row[], todayKey: string): CalendarEvent[] {
+  const events: CalendarEvent[] = [];
+  const status = (date: string): "ongoing" | "upcoming" => (date === todayKey ? "ongoing" : "upcoming");
+
+  invoices.filter(r => r.status !== "Lunas").forEach(r => {
+    const date = toDateKey(r.jatuhTempo);
+    if (!date) return;
+    events.push({ id: `inv-${r.id}`, date, title: "Tagihan jatuh tempo", titleEn: "Invoice due", detail: `${r.penyewa ?? ""} · ${r.unit ?? ""} · ${r.sisa ?? ""}`, kind: "payment", target: "invoices", status: status(date) });
+  });
+
+  reservations.forEach(r => {
+    const moveIn = toDateKey(r.jadwalMasuk);
+    if (moveIn) events.push({ id: `resv-in-${r.id}`, date: moveIn, title: "Jadwal masuk", titleEn: "Move-in", detail: `${r.penyewa ?? ""} · ${r.unit ?? ""}`, kind: "move", target: "reservations", status: status(moveIn) });
+    const moveOut = toDateKey(r.jadwalKeluar);
+    if (moveOut) events.push({ id: `resv-out-${r.id}`, date: moveOut, title: "Jadwal keluar", titleEn: "Move-out", detail: `${r.penyewa ?? ""} · ${r.unit ?? ""}`, kind: "move", target: "reservations", status: status(moveOut) });
+    const periodEnd = toDateKey(String(r.periode ?? "").split("-").pop());
+    if (periodEnd && r.status === "Aktif") events.push({ id: `resv-end-${r.id}`, date: periodEnd, title: "Kontrak berakhir", titleEn: "Contract expires", detail: `${r.penyewa ?? ""} · ${r.unit ?? ""}`, kind: "contract", target: "contracts", status: status(periodEnd) });
+  });
+
+  tickets.filter(r => r.status !== "Selesai").forEach(r => {
+    const date = toDateKey(r.createdAt);
+    if (!date) return;
+    events.push({ id: `tkt-${r.id}`, date, title: String(r.judul ?? "Tiket pemeliharaan"), titleEn: String(r.judul ?? "Maintenance ticket"), detail: `${r.properti ?? ""} · ${r.unit ?? ""}`, kind: "maintenance", target: "tickets", status: status(date) });
+  });
+
+  return events;
+}
 
 const calendarKindMeta: Record<CalendarEventKind, { label: string; labelEn: string; icon: typeof CalendarDays }> = {
   payment: { label: "Pembayaran", labelEn: "Payment", icon: CircleDollarSign },
@@ -50,20 +87,21 @@ function CalendarAgendaItem({ event, onOpen }: { event: CalendarEvent; onOpen: (
   </button>;
 }
 
-export function CalendarPage({ onOpenEvent }: { onOpenEvent: (event: CalendarEvent) => void }) {
+export function CalendarPage({ onOpenEvent, invoices, reservations, tickets }: { onOpenEvent: (event: CalendarEvent) => void; invoices: Row[]; reservations: Row[]; tickets: Row[] }) {
   const { locale } = useI18n();
   const L = (id: string, en: string) => locale === "en" ? en : id;
-  const [month, setMonth] = useState(() => new Date(2026, 5, 1));
-  const [selectedDate, setSelectedDate] = useState("2026-06-22");
+  const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
+  const [selectedDate, setSelectedDate] = useState(() => calendarDateKey(new Date()));
   const monthName = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "id-ID", { month: "long", year: "numeric" }).format(month);
   const selectedLabel = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "id-ID", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${selectedDate}T12:00:00`));
   const firstDayOffset = (month.getDay() + 6) % 7;
   const gridStart = new Date(month.getFullYear(), month.getMonth(), 1 - firstDayOffset);
   const days = Array.from({ length: 42 }, (_, index) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index));
+  const calendarEvents = useMemo(() => buildCalendarEvents(invoices, reservations, tickets, calendarDateKey(new Date())), [invoices, reservations, tickets]);
   const eventsByDate = useMemo(() => calendarEvents.reduce<Record<string, CalendarEvent[]>>((result, event) => {
     (result[event.date] ||= []).push(event);
     return result;
-  }, {}), []);
+  }, {}), [calendarEvents]);
   const selectedEvents = eventsByDate[selectedDate] || [];
   const ongoing = selectedEvents.filter(event => event.status === "ongoing");
   const upcoming = selectedEvents.filter(event => event.status === "upcoming");

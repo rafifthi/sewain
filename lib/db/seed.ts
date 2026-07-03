@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import * as schema from "./schema";
-import { users } from "./schema";
+import { users, organizations } from "./schema";
+import { initDb } from "./index";
 import path from "path";
 import fs from "fs";
 
@@ -38,46 +39,11 @@ function getClientConfig() {
 
 async function seed() {
   ensureDataDir();
+  // initDb is idempotent and creates/migrates every table (auth + domain).
+  await initDb();
+
   const client = createClient(getClientConfig());
   const database = drizzle(client, { schema });
-
-  // Only create tables locally — Turso uses drizzle-kit push
-  if (!resolveTursoUrl()) {
-    await client.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        email TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        email_verified INTEGER NOT NULL DEFAULT 0,
-        token_version INTEGER NOT NULL DEFAULT 0,
-        role_id TEXT NOT NULL DEFAULT 'admin',
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `);
-
-    await client.execute(`
-      CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        token_hash TEXT NOT NULL,
-        expires_at INTEGER NOT NULL,
-        created_at INTEGER NOT NULL
-      )
-    `);
-
-    await client.execute(`
-      CREATE TABLE IF NOT EXISTS verification_tokens (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        token_hash TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('email_verify', 'password_reset')),
-        expires_at INTEGER NOT NULL,
-        created_at INTEGER NOT NULL
-      )
-    `);
-  }
 
   const seedUsers = [
     { email: "admin@example.com", name: "Admin", password: "password", role_id: "owner" },
@@ -93,6 +59,14 @@ async function seed() {
       continue;
     }
 
+    const orgId = randomUUID();
+    await database.insert(organizations).values({
+      id: orgId,
+      name: `${u.name}'s workspace`,
+      created_at: now,
+      updated_at: now,
+    });
+
     const password_hash = await bcrypt.hash(u.password, 12);
     await database.insert(users).values({
       id: randomUUID(),
@@ -102,6 +76,7 @@ async function seed() {
       email_verified: true,
       token_version: 0,
       role_id: u.role_id,
+      org_id: orgId,
       created_at: now,
       updated_at: now,
     });

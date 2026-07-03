@@ -3,10 +3,8 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { db, initDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { generateAccessToken, generateRefreshToken } from "@/lib/auth/jwt";
-import { createHash } from "crypto";
-import { refresh_tokens } from "@/lib/db/schema";
+import { users, organizations } from "@/lib/db/schema";
+import { issueSession, toPublicUser } from "@/lib/auth/issue";
 
 let initialized = false;
 
@@ -17,7 +15,11 @@ async function ensureInit() {
   }
 }
 
-export async function POST(req: NextRequest) {
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
+}
+
+async function handlePost(req: NextRequest) {
   await ensureInit();
 
   let body: { email?: string; password?: string; name?: string };
@@ -45,47 +47,54 @@ export async function POST(req: NextRequest) {
   const password_hash = await bcrypt.hash(password, 12);
   const now = new Date();
   const userId = randomUUID();
+  const orgId = randomUUID();
 
-  const [user] = await db()
-    .insert(users)
-    .values({
-      id: userId,
-      email: normalizedEmail,
-      name: name.trim(),
-      password_hash,
-      email_verified: true, // auto-verify for now
-      token_version: 0,
-      role_id: "admin",
-      created_at: now,
-      updated_at: now,
-    })
-    .returning();
-
-  const accessToken = await generateAccessToken(user);
-  const refreshToken = await generateRefreshToken(user);
-  const tokenHash = createHash("sha256").update(refreshToken).digest("hex");
-  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  await db().insert(refresh_tokens).values({
-    id: randomUUID(),
-    user_id: user.id,
-    token_hash: tokenHash,
-    expires_at: expiresAt,
+  await db().insert(organizations).values({
+    id: orgId,
+    name: `${name.trim()}'s workspace`,
     created_at: now,
+    updated_at: now,
   });
 
-  return NextResponse.json(
-    {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        roleId: user.role_id,
-        emailVerified: user.email_verified,
-      },
-    },
-    { status: 201 }
-  );
+  let user;
+  try {
+    [user] = await db()
+      .insert(users)
+      .values({
+        id: userId,
+        email: normalizedEmail,
+        name: name.trim(),
+        password_hash,
+        email_verified: true, // auto-verify for now
+        token_version: 0,
+        role_id: "admin",
+        org_id: orgId,
+        created_at: now,
+        updated_at: now,
+      })
+      .returning();
+  } catch (error) {
+    // Two signups can pass the pre-check concurrently; the unique index on
+    // email settles the race.
+    try {
+      await db().delete(organizations).where(eq(organizations.id, orgId));
+    } catch {
+      // best-effort cleanup of the orphaned org
+    }
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: "Email already in use" }, { status: 409 });
+    }
+    throw error;
+  }
+
+  return issueSession(user, { user: toPublicUser(user) }, 201);
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req);
+  } catch (error) {
+    console.error("[auth/signup]", error);
+    return NextResponse.json({ error: "Authentication service unavailable" }, { status: 500 });
+  }
 }

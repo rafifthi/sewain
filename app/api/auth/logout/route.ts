@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
-import { createHash } from "crypto";
 import { db, initDb } from "@/lib/db";
 import { refresh_tokens, users } from "@/lib/db/schema";
 import { verifyRefreshToken } from "@/lib/auth/jwt";
+import { REFRESH_COOKIE, clearAuthCookies } from "@/lib/auth/cookies";
+import { hashToken } from "@/lib/auth/issue";
 
 let initialized = false;
 
@@ -15,46 +16,49 @@ async function ensureInit() {
 }
 
 export async function POST(req: NextRequest) {
-  await ensureInit();
+  const done = NextResponse.json({ ok: true });
+  clearAuthCookies(done);
 
-  let body: { refreshToken?: string; allDevices?: boolean } = {};
   try {
-    body = await req.json();
-  } catch {
-    // ignore — logout is best-effort
-  }
+    await ensureInit();
 
-  if (!body.refreshToken) {
-    return NextResponse.json({ ok: true });
-  }
-
-  const payload = await verifyRefreshToken(body.refreshToken);
-  if (!payload) {
-    return NextResponse.json({ ok: true });
-  }
-
-  if (body.allDevices) {
-    // Increment token_version to invalidate all refresh tokens for this user
-    const [user] = await db()
-      .select({ token_version: users.token_version })
-      .from(users)
-      .where(eq(users.id, payload.sub))
-      .limit(1);
-
-    if (user) {
-      await db()
-        .update(users)
-        .set({ token_version: user.token_version + 1, updated_at: new Date() })
-        .where(eq(users.id, payload.sub));
+    let body: { allDevices?: boolean } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // no body — logout is best-effort
     }
 
-    await db().delete(refresh_tokens).where(eq(refresh_tokens.user_id, payload.sub));
-  } else {
-    const tokenHash = createHash("sha256").update(body.refreshToken).digest("hex");
-    await db()
-      .delete(refresh_tokens)
-      .where(and(eq(refresh_tokens.user_id, payload.sub), eq(refresh_tokens.token_hash, tokenHash)));
+    const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+    if (!refreshToken) return done;
+
+    const payload = await verifyRefreshToken(refreshToken);
+    if (!payload) return done;
+
+    if (body.allDevices) {
+      // Increment token_version to invalidate all outstanding tokens.
+      const [user] = await db()
+        .select({ token_version: users.token_version })
+        .from(users)
+        .where(eq(users.id, payload.sub))
+        .limit(1);
+
+      if (user) {
+        await db()
+          .update(users)
+          .set({ token_version: user.token_version + 1, updated_at: new Date() })
+          .where(eq(users.id, payload.sub));
+      }
+
+      await db().delete(refresh_tokens).where(eq(refresh_tokens.user_id, payload.sub));
+    } else {
+      await db()
+        .delete(refresh_tokens)
+        .where(and(eq(refresh_tokens.user_id, payload.sub), eq(refresh_tokens.token_hash, hashToken(refreshToken))));
+    }
+  } catch (error) {
+    console.error("[auth/logout]", error);
   }
 
-  return NextResponse.json({ ok: true });
+  return done;
 }

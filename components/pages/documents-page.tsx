@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, FileSignature, FileText, FolderOpen, IdCard, Pencil, Search, Trash2 } from "lucide-react";
 import { Row } from "@/lib/data";
 import { message } from "@/lib/i18n";
-import { useI18n, useAccess } from "@/components/context";
+import { useI18n, useAccess, useConfirm } from "@/components/context";
 import {
   Status, Toolbar, PageHead, DialogState,
 } from "@/components/sewain-app";
@@ -12,11 +12,23 @@ import {
 export function DocumentsPage({ rows, setRows, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
   const { locale, t, v } = useI18n();
   const { can } = useAccess();
+  const confirm = useConfirm();
   const L = (id: string, en: string) => (locale === "en" ? en : id);
   const [openFolder, setOpenFolder] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const remove = (row: Row) => { setRows(old => old.filter(d => d.id !== row.id)); notify(message(locale, "removed", { item: t("dokumen") })); };
+  const remove = async (row: Row) => {
+    const ok = await confirm({
+      title: L(`Hapus "${v(row.nama)}"?`, `Delete "${v(row.nama)}"?`),
+      description: L("Dokumen akan dihapus permanen.", "The document will be permanently removed."),
+      confirmLabel: L("Hapus", "Delete"),
+      cancelLabel: L("Batal", "Cancel"),
+      danger: true,
+    });
+    if (!ok) return;
+    setRows(old => old.filter(d => d.id !== row.id));
+    notify(message(locale, "removed", { item: t("dokumen") }));
+  };
 
   // Group by kategori; blank → "Lainnya / Other".
   const folders = rows.reduce<Record<string, Row[]>>((acc, d) => {

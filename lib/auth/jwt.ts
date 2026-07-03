@@ -1,9 +1,21 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "@/lib/db/schema";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.SIGNOUTH_SECRET ?? "sewain-dev-secret-key-change-in-production"
-);
+let _secret: Uint8Array | null = null;
+
+function jwtSecret(): Uint8Array {
+  if (_secret) return _secret;
+  const raw = process.env.SIGNOUTH_SECRET;
+  if (!raw) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SIGNOUTH_SECRET is not set — refusing to sign/verify tokens in production");
+    }
+    _secret = new TextEncoder().encode("sewain-dev-secret-key-change-in-production");
+    return _secret;
+  }
+  _secret = new TextEncoder().encode(raw);
+  return _secret;
+}
 
 export interface JWTPayload {
   sub: string;
@@ -24,7 +36,7 @@ export async function generateAccessToken(user: Pick<User, "id" | "email" | "nam
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("15m")
-    .sign(JWT_SECRET);
+    .sign(jwtSecret());
 }
 
 export async function generateRefreshToken(user: Pick<User, "id" | "token_version">): Promise<string> {
@@ -35,12 +47,12 @@ export async function generateRefreshToken(user: Pick<User, "id" | "token_versio
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(JWT_SECRET);
+    .sign(jwtSecret());
 }
 
 export async function verifyAccessToken(token: string): Promise<JWTPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, jwtSecret());
     return payload as unknown as JWTPayload;
   } catch {
     return null;
@@ -49,7 +61,7 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload | nul
 
 export async function verifyRefreshToken(token: string): Promise<{ sub: string; tokenVersion: number } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, jwtSecret());
     return payload as unknown as { sub: string; tokenVersion: number };
   } catch {
     return null;
