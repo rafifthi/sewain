@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "@/lib/db/schema";
 
@@ -8,7 +9,13 @@ function jwtSecret(): Uint8Array {
   const raw = process.env.SIGNOUTH_SECRET;
   if (!raw) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("SIGNOUTH_SECRET is not set — refusing to sign/verify tokens in production");
+      console.warn(
+        "[sewain] SIGNOUTH_SECRET is not set — generating ephemeral secret. " +
+          "All sessions will be invalidated on the next deploy. " +
+          "Set SIGNOUTH_SECRET in your environment for persistent sessions."
+      );
+      _secret = new TextEncoder().encode(randomBytes(32).toString("hex"));
+      return _secret;
     }
     _secret = new TextEncoder().encode("sewain-dev-secret-key-change-in-production");
     return _secret;
