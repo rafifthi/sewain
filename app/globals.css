@@ -60,14 +60,93 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+
+/* Base skeleton primitive */
 .skeleton {
-  background: linear-gradient(90deg, var(--border) 25%, var(--surface-hover) 50%, var(--border) 75%);
+  background: linear-gradient(90deg, var(--border) 25%, var(--surface-2) 50%, var(--border) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
 }
+
+/* Variants */
+.skeleton-circle {
+  border-radius: 50%;
+  flex: none;
+}
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+}
+.skeleton-text-sm {
+  height: 11px;
+  margin-bottom: 4px;
+}
+.skeleton-text-lg {
+  height: 20px;
+  margin-bottom: 10px;
+}
+.skeleton-block {
+  display: block;
+}
+
+/* Card skeleton */
+.skeleton-card {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-border);
+  padding: 20px 22px 18px;
+}
+.skeleton-card-image {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.skeleton-card-body {
+  display: grid;
+  gap: 8px;
+  padding: 20px 22px 18px;
+  background: var(--surface);
+}
+
+/* List row skeleton */
+.skeleton-list-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+/* Detail page skeleton */
+.skeleton-detail {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  padding: 24px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-border);
+}
+.skeleton-detail-image {
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+}
+.skeleton-detail-lines {
+  display: grid;
+  gap: 10px;
+}
+
+/* Table skeleton — used inside existing .table-wrap */
 .skeleton-th { height: 16px; width: 80%; }
 .skeleton-td { height: 14px; width: 70%; }
+
+/* Stats skeleton */
 .skeleton-stat-label { height: 12px; width: 60%; margin-bottom: 8px; }
 .skeleton-stat-value { height: 20px; width: 40%; }
 
