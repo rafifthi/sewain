@@ -65,7 +65,7 @@ const defaultIntegrationConfig: IntegrationConfig = {
   apiKey: "",
 };
 
-import { I18nContext, useI18n, TokenConfigContext, useTokenConfig, AccessContext, useAccess, ConfirmProvider, useConfirm, type I18nState, type AccessCtx } from "@/components/context";
+import { I18nContext, useI18n, TokenConfigContext, useTokenConfig, AccessContext, useAccess, ConfirmProvider, useConfirm, useToast, type I18nState, type AccessCtx } from "@/components/context";
 
 const pageMeta: Record<PageId, { title: string; description: string; singular: string }> = {
   dashboard: { title: "Ringkasan", description: "Hal yang perlu Anda tindak lanjuti hari ini.", singular: "aktivitas" },
@@ -377,9 +377,11 @@ function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, g
     </section></>;
 }
 
-export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, goToProperties, notify }: { tenant: Row; payments: Row[]; documents: Row[]; onBack: () => void; onEdit: () => void; onDelete: () => void; goToProperties: () => void; notify?: (s: string) => void }) {
+export function TenantDetail({ tenant, payments, documents, onBack, onEdit, onDelete, goToProperties, notify, loading = false }: { tenant: Row; payments: Row[]; documents: Row[]; onBack: () => void; onEdit: () => void; onDelete: () => void; goToProperties: () => void; notify?: (s: string) => void; loading?: boolean }) {
   const confirm = useConfirm();
   const { locale, t, v } = useI18n();
+
+  if (loading) return <SkeletonTenantDetail />;
   const activeLease = tenant.status === "Aktif" ? 1 : 0;
   const rupiahValue = (value: unknown) => Number(String(value || "0").replace(/[^\d]/g, ""));
   const outstanding = payments.reduce((total, payment) => total + rupiahValue(payment.sisa), 0);
@@ -1410,7 +1412,7 @@ function SewainContent() {
   const [focusReservationId, setFocusReservationId] = useState("");
   const [focusContractId, setFocusContractId] = useState("");
   const [dialog, setDialog] = useState<DialogState>(null);
-  const [toast, setToast] = useState("");
+  const toast = useToast();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [readNotifications, setReadNotifications] = useState<string[]>([]);
@@ -1484,17 +1486,16 @@ function SewainContent() {
   }, [actingAsOpen]);
   const stores: Partial<Record<PageId, [Row[], React.Dispatch<React.SetStateAction<Row[]>>]>> = useMemo(() => ({ properties: [propertyRows, setPropertyRows], invoices: [invoiceRows, setInvoiceRows], tenants: [tenants, setTenants], reservations: [reservations, setReservations], tokens: [tokens, setTokens], contracts: [contracts, setContracts], tickets: [tickets, setTickets], documents: [documents, setDocuments] }), [propertyRows, invoiceRows, tenants, reservations, tokens, contracts, tickets, documents, setPropertyRows, setInvoiceRows, setTenants, setReservations, setTokens, setContracts, setTickets, setDocuments]);
   const notificationItems = useMemo(() => buildNotificationItems(invoiceRows, tickets, contracts), [invoiceRows, tickets, contracts]);
-  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
+  const notify = (message: string) => { toast.info(message); };
   const [syncErrorModule, setSyncErrorModule] = useState<string | null>(null);
   useEffect(() => {
     const onSyncError = (event: Event) => {
       const detail = (event as CustomEvent<SyncErrorDetail>).detail;
       const label = t(pageMeta[detail.module as PageId]?.title ?? detail.module);
       if (detail.kind === "load") setSyncErrorModule(detail.module);
-      setToast(detail.kind === "load"
+      toast.error(detail.kind === "load"
         ? (locale === "en" ? `Failed to load ${label} data. Refresh to retry.` : `Gagal memuat data ${label}. Muat ulang untuk mencoba lagi.`)
         : (locale === "en" ? `Failed to save ${label} changes. Check your connection.` : `Gagal menyimpan perubahan ${label}. Periksa koneksi Anda.`));
-      window.setTimeout(() => setToast(""), 5000);
     };
     window.addEventListener(SYNC_ERROR_EVENT, onSyncError);
     return () => window.removeEventListener(SYNC_ERROR_EVENT, onSyncError);
@@ -1564,7 +1565,7 @@ function SewainContent() {
     }
     setter(old => row._delete ? old.filter(item => item.id !== row.id) : old.some(r => r.id === row.id) ? old.map(r => r.id === row.id ? row : r) : [row, ...old]);
     setDialog(null);
-    notify(row._delete ? message(locale, "removed", { item: t(pageMeta[target].singular) }) : message(locale, "saved", { item: t(pageMeta[target].singular) }));
+    toast.success(row._delete ? message(locale, "removed", { item: t(pageMeta[target].singular) }) : message(locale, "saved", { item: t(pageMeta[target].singular) }));
   };
   const currentStore = stores[page];
 
@@ -1598,7 +1599,6 @@ function SewainContent() {
     <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} page={page} navAllowed={navAllowed} canCreate={module => access.can(module, "create")} go={go} openDialog={setDialog} openBooking={openBooking} openRecord={openSearchResult} sources={searchSources} />
     {dialog && <EditDialog state={dialog} onClose={() => setDialog(null)} onSave={save} />}
     {booking && <BookingDialog ctx={booking} properties={propertyRows} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} setReservations={setReservations} onClose={() => setBooking(null)} onCreated={id => { setFocusReservationId(id); go("reservations"); }} notify={notify} />}
-    {toast && <div className="toast" role="status"><CheckCircle2 />{toast}</div>}
   </div></AccessContext.Provider></TokenConfigContext.Provider>;
 }
 
