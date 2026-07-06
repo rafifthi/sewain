@@ -25,7 +25,7 @@ import {
   DEFAULT_CONTRACT_TEMPLATE_ID, findContractTemplate, SEED_CONTRACT_TEMPLATES,
 } from "@/lib/contracts";
 import { Sidebar, Topbar, CommandPalette, type DataPageId } from "@/components/layout";
-import { SkeletonTable } from "@/components/skeleton";
+import { SkeletonCard, SkeletonStats, SkeletonTable, SkeletonPropertyDetail, SkeletonTenantDetail, SkeletonDialogForm, ErrorState } from "@/components/skeleton";
 import { CalendarPage } from "@/components/pages/calendar-page";
 import { InvoicePage } from "@/components/pages/invoices-page";
 import { TokenPage } from "@/components/pages/tokens-page";
@@ -348,7 +348,7 @@ export function bodySnippet(body: string) {
   return text + (text.length >= 100 ? "..." : "");
 }
 
-function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, goToProperties }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; documents: Row[]; openDialog: (d: DialogState) => void; notify: (s: string) => void; goToProperties: () => void }) {
+function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, goToProperties, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; documents: Row[]; openDialog: (d: DialogState) => void; notify: (s: string) => void; goToProperties: () => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(null);
   const [search, setSearch] = useState("");
@@ -362,7 +362,11 @@ function TenantsPage({ rows, setRows, invoices, documents, openDialog, notify, g
   if (selected) {
     const payments = invoices.filter(invoice => invoice.penyewa === selected.nama);
     const tenantDocuments = documents.filter(document => document.terkait === selected.nama);
-    return <TenantDetail tenant={selected} payments={payments} documents={tenantDocuments} onBack={() => setSelected(null)} onEdit={() => openDialog({ mode: "edit", page: "tenants", row: selected })} onDelete={() => remove(selected)} goToProperties={goToProperties} notify={notify} />;
+    return <TenantDetail tenant={selected} payments={payments} documents={tenantDocuments} onBack={() => setSelected(null)} onEdit={() => openDialog({ mode: "edit", page: "tenants", row: selected })} onDelete={() => remove(selected)} goToProperties={goToProperties} notify={notify} loading={loading} />;
+  }
+
+  if (loading) {
+    return <><PageHead page="tenants" /><section className="panel skeleton-transition"><SkeletonTable rows={5} cols={5} /></section></>;
   }
 
   return <><PageHead page="tenants" action={() => openDialog({ mode: "create", page: "tenants" })} />
@@ -708,13 +712,13 @@ function Dashboard({ go, reservations, properties, invoices, tickets, loading, o
 
   return <>
     <PageHead page="dashboard" />
-    <div className="stats-strip">
-      <div className="stat"><span>{t("Tingkat hunian")}</span><strong>{loading ? "–" : `${occupancy}%`}</strong><small>{occupiedUnits}/{totalUnits} {locale === "en" ? "units" : "unit"}</small></div>
+    {loading ? <div className="skeleton-transition"><SkeletonStats /></div> : <div className="stats-strip">
+      <div className="stat"><span>{t("Tingkat hunian")}</span><strong>{`${occupancy}%`}</strong><small>{occupiedUnits}/{totalUnits} {locale === "en" ? "units" : "unit"}</small></div>
       <div className="stat"><span>{t("Tagihan diterima")}</span><strong>{v(formatRp(collected))}</strong><small>{collectedPct}% {locale === "en" ? "collected" : "tertagih"}</small></div>
       <div className="stat"><span>{t("Perlu ditagih")}</span><strong>{v(formatRp(outstanding))}</strong><small style={outstanding > 0 ? { color: "var(--danger)" } : undefined}>{unpaidCount} {locale === "en" ? "invoices" : "tagihan"}</small></div>
       <div className="stat"><span>{t("Tiket terbuka")}</span><strong>{openTickets.length}</strong><small>{assignedTickets.length} {locale === "en" ? "assigned" : "ditugaskan"}</small></div>
       <div className="stat"><span>{t("Deposit dikelola")}</span><strong>{v(formatRp(depositMetrics.held || 0))}</strong><small>{t("Total deposit")}</small></div>
-    </div>
+    </div>}
     <div className="split dashboard-split">
       <div>
         <section className="panel"><div className="panel-head"><div><h2>{t("Portofolio properti")}</h2><p>{t("Hunian dan pendapatan bulan berjalan")}</p></div><button className="button" onClick={() => go("properties")}>{t("Lihat properti")}</button></div>
@@ -752,7 +756,7 @@ function PropertyCard({ row, onOpen }: { row: Row; onOpen: () => void }) {
   </article>;
 }
 
-function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(null);
   const [search, setSearch] = useState("");
@@ -768,16 +772,18 @@ function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onB
     return matchesSearch && (filter === "Semua" || filter === unitType || rowLabels.includes(filter));
   });
   const liveSelected = selected ? rows.find(r => r.id === selected.id) || selected : null;
-  if (liveSelected) return <PropertyDetail property={liveSelected} units={units} setUnits={setUnits} setProperties={setRows} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} openDialog={openDialog} notify={notify} />;
+  if (liveSelected) return <PropertyDetail property={liveSelected} units={units} setUnits={setUnits} setProperties={setRows} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} openDialog={openDialog} notify={notify} loading={loading} />;
   return <><PageHead page="properties" action={() => openDialog({ mode: "create", page: "properties" })} />
     <div className="property-list-toolbar"><div className="field-inline"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari properti")} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Cari properti...")} /></div><div className="property-filter-list" aria-label={t("Filter properti")}>{filters.map(item => <button type="button" className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>{v(item)}</button>)}</div></div>
-    {filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
+    {loading ? <section className="property-grid skeleton-transition">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} withImage contentLines={2} />)}</section> : filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
   </>;
 }
 
-function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, onBook, onViewReservations, onBack, openDialog, notify }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, onBook, onViewReservations, onBack, openDialog, notify, loading = false }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const confirm = useConfirm();
   const { locale, t, v } = useI18n();
+
+  if (loading) return <SkeletonPropertyDetail />;
   const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
   const propertyUnits = unitsForProperty(units, property);
   const [unitSearch, setUnitSearch] = useState("");
@@ -1054,6 +1060,13 @@ const memberStatusLabel: Record<MemberStatus, string> = { active: "Aktif", invit
 function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
   const { locale, t } = useI18n();
   const row = state.row;
+  const [loading, setLoading] = useState(state.mode === "edit");
+
+  // Resolve loading immediately — property data is already in memory.
+  // Wire real async fetching here when fetching from API.
+  useEffect(() => { if (loading) setLoading(false); }, [loading]);
+
+  if (loading) return <SkeletonDialogForm fields={7} showSectionHeads />;
   const initialLabels = String(row?.labels || row?.tipe || "").split(/[|,]/).map(item => item.trim()).filter(Boolean);
   const legacyContact = String(row?.kontak || "");
   const legacyPhone = legacyContact.match(/(?:\+?\d[\d\s-]{7,})$/)?.[0]?.trim() || "";
@@ -1168,11 +1181,19 @@ function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState
 function GenericEditDialog({ state, onClose, onSave }: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
   const { locale, t } = useI18n();
   const schema = schemas[state.page] || [];
+  const [loading, setLoading] = useState(state.mode === "edit");
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(schema.map(field => {
     const value = state.row?.[field.key] ?? "";
     return [field.key, field.type === "date" ? toDateInputValue(value) : String(value)];
   })));
   const [error, setError] = useState("");
+
+  // Resolve loading immediately since form data is already in memory.
+  // When actual async fetching is needed (e.g. API call for row data),
+  // setLoading(true) before fetch and setLoading(false) after.
+  useEffect(() => { if (loading) setLoading(false); }, [loading]);
+
+  if (loading) return <SkeletonDialogForm fields={schema.length} />;
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     for (const field of schema) {
@@ -1194,6 +1215,13 @@ function GenericEditDialog({ state, onClose, onSave }: { state: Exclude<DialogSt
 export function TenantDialog({ state, onClose, onSave }: { state: Exclude<DialogState, null>; onClose: () => void; onSave: (page: PageId, row: Row) => void }) {
   const { locale, t } = useI18n();
   const row = state.row;
+  const [loading, setLoading] = useState(state.mode === "edit");
+
+  // Resolve loading immediately — tenant data is already in memory.
+  // Wire real async fetching here when fetching from API (e.g. /api/members).
+  useEffect(() => { if (loading) setLoading(false); }, [loading]);
+
+  if (loading) return <SkeletonDialogForm fields={8} showSectionHeads />;
   const [values, setValues] = useState({
     nama: String(row?.nama || ""), telepon: String(row?.telepon || ""), email: String(row?.email || ""), telegram_id: String(row?.telegram_id || ""),
     nomorIdentitas: String(row?.nomorIdentitas || ""), gambarIdentitas: String(row?.gambarIdentitas || ""),
@@ -1457,10 +1485,12 @@ function SewainContent() {
   const stores: Partial<Record<PageId, [Row[], React.Dispatch<React.SetStateAction<Row[]>>]>> = useMemo(() => ({ properties: [propertyRows, setPropertyRows], invoices: [invoiceRows, setInvoiceRows], tenants: [tenants, setTenants], reservations: [reservations, setReservations], tokens: [tokens, setTokens], contracts: [contracts, setContracts], tickets: [tickets, setTickets], documents: [documents, setDocuments] }), [propertyRows, invoiceRows, tenants, reservations, tokens, contracts, tickets, documents, setPropertyRows, setInvoiceRows, setTenants, setReservations, setTokens, setContracts, setTickets, setDocuments]);
   const notificationItems = useMemo(() => buildNotificationItems(invoiceRows, tickets, contracts), [invoiceRows, tickets, contracts]);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
+  const [syncErrorModule, setSyncErrorModule] = useState<string | null>(null);
   useEffect(() => {
     const onSyncError = (event: Event) => {
       const detail = (event as CustomEvent<SyncErrorDetail>).detail;
       const label = t(pageMeta[detail.module as PageId]?.title ?? detail.module);
+      if (detail.kind === "load") setSyncErrorModule(detail.module);
       setToast(detail.kind === "load"
         ? (locale === "en" ? `Failed to load ${label} data. Refresh to retry.` : `Gagal memuat data ${label}. Muat ulang untuk mencoba lagi.`)
         : (locale === "en" ? `Failed to save ${label} changes. Check your connection.` : `Gagal menyimpan perubahan ${label}. Periksa koneksi Anda.`));
@@ -1541,16 +1571,18 @@ function SewainContent() {
   // expenses/reports are not part of the permission model (ModuleId) yet, so they
   // are always viewable — like dashboard and calendar.
   const navAllowed = (id: string) => ["dashboard", "calendar", "expenses", "reports"].includes(id) || access.can(id as ModuleId, "view");
+  const isErrorState = (mod: string, loading: boolean) => syncErrorModule === mod && !loading;
+  const handleRetry = () => { setSyncErrorModule(null); window.location.reload(); };
   return <TokenConfigContext.Provider value={{ config: tokenConfig, setConfig: setTokenConfig, properties: propertyRows }}><AccessContext.Provider value={access}><div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}><a className="skip-link" href="#main-content">{t("Lewati navigasi")}</a>
     {mobileNav && <button className="mobile-overlay" aria-label={t("Tutup navigasi")} onClick={() => setMobileNav(false)} />}
     <Sidebar sidebarCollapsed={sidebarCollapsed} toggleSidebar={toggleSidebar} locale={locale} setLocale={setLocale} page={page} go={go} navAllowed={navAllowed} access={access} t={t} mobileNav={mobileNav} setMobileNav={setMobileNav} />
     <div className="shell"><Topbar toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} t={t} setMobileNav={setMobileNav} page={page} go={go} access={access} setActingAsOpen={setActingAsOpen} actingAsOpen={actingAsOpen} actingAsRef={actingAsRef} locale={locale} notificationsRef={notificationsRef} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} notificationItems={notificationItems} readNotifications={readNotifications} rememberRead={rememberRead} openNotification={openNotification} onOpenSearch={() => setPaletteOpen(true)} />
       <main className="main" id="main-content">
-        {page === "dashboard" && <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading} onLoadDemo={loadDemoData} />}
+        {page === "dashboard" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading} onLoadDemo={loadDemoData} />)}
         {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} invoices={invoiceRows} reservations={reservations} tickets={tickets} />}
-        {page === "properties" && <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} />}
-        {page === "tenants" && <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} />}
-        {page === "invoices" && <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} loading={invoicesLoading} />}
+        {page === "properties" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} loading={propertiesLoading} />)}
+        {page === "tenants" && (isErrorState("tenants", tenantsLoading) ? <ErrorState onRetry={handleRetry} /> : <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} loading={tenantsLoading} />)}
+        {page === "invoices" && (isErrorState("invoices", invoicesLoading) ? <ErrorState onRetry={handleRetry} /> : <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} loading={invoicesLoading} />)}
         {page === "expenses" && <ExpensesPage rows={expenseRows} setRows={setExpenseRows} properties={propertyRows} openDialog={setDialog} notify={notify} />}
         {page === "reports" && <ReportsPage properties={propertyRows} invoices={invoiceRows} />}
         {page === "tickets" && <MaintenancePage rows={tickets} setRows={setTickets} openDialog={setDialog} notify={notify} />}

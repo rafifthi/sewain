@@ -4,12 +4,13 @@ import { useState } from "react";
 import { Building2, Search, Plus } from "lucide-react";
 import { Row } from "@/lib/data";
 import { useI18n, type I18nState } from "@/components/context";
+import { SkeletonCard } from "@/components/skeleton";
 import {
   PageHead, PropertyCard, PropertyDetail, isSingleUnit,
   PageId, DialogState, BookingState,
 } from "./shared";
 
-export function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void }) {
+export function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(null);
   const [search, setSearch] = useState("");
@@ -28,6 +29,6 @@ export function PropertiesPage({ rows, setRows, units, setUnits, invoices, ticke
   if (liveSelected) return <PropertyDetail property={liveSelected} units={units} setUnits={setUnits} setProperties={setRows} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} openDialog={openDialog} notify={notify} />;
   return <><PageHead page="properties" action={() => openDialog({ mode: "create", page: "properties" })} />
     <div className="property-list-toolbar"><div className="field-inline"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari properti")} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Cari properti...")} /></div><div className="property-filter-list" aria-label={t("Filter properti")}>{filters.map(item => <button type="button" className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>{v(item)}</button>)}</div></div>
-    {filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
+    {loading ? <section className="property-grid skeleton-transition">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} withImage contentLines={2} />)}</section> : filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
   </>;
 }
