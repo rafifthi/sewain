@@ -112,7 +112,7 @@ export function SkeletonCard({
 }) {
   return (
     <div className={`skeleton-card ${className}`.trim()} aria-hidden="true">
-      {withImage && <Skeleton height={0} className="skeleton-card-image" />}
+      {withImage && <Skeleton className="skeleton-card-image" />}
       <div className={withImage ? "skeleton-card-body" : ""}>
         <Skeleton width="65%" height={18} className="skeleton-text-lg" />
         <SkeletonText lines={contentLines} size="sm" width="90%" lastLineWidth="45%" />
