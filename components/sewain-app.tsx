@@ -784,10 +784,7 @@ function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onB
 function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, onBook, onViewReservations, onBack, openDialog, notify, loading = false }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const confirm = useConfirm();
   const { locale, t, v } = useI18n();
-
-  if (loading) return <SkeletonPropertyDetail />;
   const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
-  const propertyUnits = unitsForProperty(units, property);
   const [unitSearch, setUnitSearch] = useState("");
   const [unitStatusFilter, setUnitStatusFilter] = useState("Semua");
   const [collapsedFloors, setCollapsedFloors] = useState<string[]>([]);
@@ -795,11 +792,14 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
   const [showMore, setShowMore] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [addUnit, setAddUnit] = useState(false);
+  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "" });
+
+  if (loading) return <SkeletonPropertyDetail />;
+  const propertyUnits = unitsForProperty(units, property);
   const storedGroups = String(property.unitGroups || "").split("|").map(group => group.trim()).filter(Boolean);
   const resolvedGroups = Array.from(new Set([...storedGroups, ...propertyUnits.map(row => String(row.lantai || "1").trim()).filter(Boolean)]));
   const unitGroupNames = (resolvedGroups.length ? resolvedGroups : ["1"])
     .sort((a, b) => unitGroupLabel(a, t, v).localeCompare(unitGroupLabel(b, t, v), locale === "en" ? "en" : "id", { numeric: true }));
-  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: unitGroupNames[0] || "1", sewa: "", deposit: "" });
   const statusFilters = [
     { id: "Semua", label: locale === "en" ? "All" : "Semua", count: propertyUnits.length },
     { id: "Dihuni", label: locale === "en" ? "Occupied" : "Dihuni", count: propertyUnits.filter(row => /dihuni/i.test(String(row.status))).length },
@@ -1063,17 +1063,11 @@ function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState
   const { locale, t } = useI18n();
   const row = state.row;
   const [loading, setLoading] = useState(state.mode === "edit");
-
-  // Resolve loading immediately — property data is already in memory.
-  // Wire real async fetching here when fetching from API.
-  useEffect(() => { if (loading) setLoading(false); }, [loading]);
-
-  if (loading) return <SkeletonDialogForm fields={7} showSectionHeads />;
   const initialLabels = String(row?.labels || row?.tipe || "").split(/[|,]/).map(item => item.trim()).filter(Boolean);
   const legacyContact = String(row?.kontak || "");
   const legacyPhone = legacyContact.match(/(?:\+?\d[\d\s-]{7,})$/)?.[0]?.trim() || "";
-  const [name, setName] = useState(String(row?.nama || ""));
   const fullAddress = String(row?.alamat || row?.lokasi || "");
+  const [name, setName] = useState(String(row?.nama || ""));
   const [addressStreet, setAddressStreet] = useState(String(row?.addressStreet || fullAddress));
   const [addressCity, setAddressCity] = useState(String(row?.addressCity || ""));
   const [addressProvince, setAddressProvince] = useState(String(row?.addressProvince || ""));
@@ -1093,6 +1087,12 @@ function PropertyDialog({ state, onClose, onSave }: { state: Exclude<DialogState
   const [imageData, setImageData] = useState(String(row?.image || ""));
   const [imageName, setImageName] = useState(String(row?.imageName || ""));
   const [error, setError] = useState("");
+
+  // Resolve loading immediately — property data is already in memory.
+  // Wire real async fetching here when fetching from API.
+  useEffect(() => { if (loading) setLoading(false); }, [loading]);
+
+  if (loading) return <SkeletonDialogForm fields={7} showSectionHeads />;
 
   const addLabel = (raw = labelInput) => {
     const next = raw.trim();
@@ -1218,12 +1218,6 @@ export function TenantDialog({ state, onClose, onSave }: { state: Exclude<Dialog
   const { locale, t } = useI18n();
   const row = state.row;
   const [loading, setLoading] = useState(state.mode === "edit");
-
-  // Resolve loading immediately — tenant data is already in memory.
-  // Wire real async fetching here when fetching from API (e.g. /api/members).
-  useEffect(() => { if (loading) setLoading(false); }, [loading]);
-
-  if (loading) return <SkeletonDialogForm fields={8} showSectionHeads />;
   const [values, setValues] = useState({
     nama: String(row?.nama || ""), telepon: String(row?.telepon || ""), email: String(row?.email || ""), telegram_id: String(row?.telegram_id || ""),
     nomorIdentitas: String(row?.nomorIdentitas || ""), gambarIdentitas: String(row?.gambarIdentitas || ""),
@@ -1231,6 +1225,12 @@ export function TenantDialog({ state, onClose, onSave }: { state: Exclude<Dialog
   });
   const [imageName, setImageName] = useState("");
   const [error, setError] = useState("");
+
+  // Resolve loading immediately — tenant data is already in memory.
+  // Wire real async fetching here when fetching from API (e.g. /api/members).
+  useEffect(() => { if (loading) setLoading(false); }, [loading]);
+
+  if (loading) return <SkeletonDialogForm fields={8} showSectionHeads />;
   const update = (key: keyof typeof values, value: string) => setValues(current => ({ ...current, [key]: value }));
   const handleImage = (file?: File) => {
     if (!file) return;
