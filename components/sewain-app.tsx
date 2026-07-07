@@ -789,6 +789,8 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
   const [unitStatusFilter, setUnitStatusFilter] = useState("Semua");
   const [collapsedFloors, setCollapsedFloors] = useState<string[]>([]);
   const [unitDrawer, setUnitDrawer] = useState<Row | null>(null);
+  const [editUnitMode, setEditUnitMode] = useState(false);
+  const [editUnitForm, setEditUnitForm] = useState({ sewa: "", deposit: "", tunggakan: "" });
   const [showMore, setShowMore] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [addUnit, setAddUnit] = useState(false);
@@ -905,6 +907,27 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
     setAddUnit(false);
     setUnitForm({ unit: "", tipe: "Standar", lantai: unitForm.lantai, sewa: "", deposit: "" });
   };
+  const openUnitEdit = (row: Row) => {
+    setEditUnitForm({
+      sewa: String(rupiah(row.sewa) || ""),
+      deposit: String(rupiah(row.deposit) || ""),
+      tunggakan: String(rupiah(row.tunggakan) || ""),
+    });
+    setEditUnitMode(true);
+  };
+  const saveUnitEdit = (row: Row) => {
+    setUnits(old => old.map(u => u.id === row.id ? {
+      ...u,
+      sewa: editUnitForm.sewa ? formatRp(rupiah(editUnitForm.sewa)) : "Rp0",
+      deposit: editUnitForm.deposit ? formatRp(rupiah(editUnitForm.deposit)) : "Rp0",
+      tunggakan: editUnitForm.tunggakan ? formatRp(rupiah(editUnitForm.tunggakan)) : "Rp0",
+    } : u));
+    setEditUnitMode(false);
+    notify(locale === "en" ? "Unit updated." : "Unit berhasil diperbarui.");
+  };
+  const cancelUnitEdit = () => {
+    setEditUnitMode(false);
+  };
 
   const singleUnitView = primaryUnit ? <section className="single-unit-panel">
     <div className="single-unit-head"><div><span className="eyebrow">{locale === "en" ? "Primary unit" : "Unit utama"}</span><h2>{v(property.nama)}</h2><p>{v(primaryUnit.tipe)} · {t("Lantai")} {v(primaryUnit.lantai)}</p></div><div className="single-unit-head-actions"><Status>{primaryUnit.status}</Status>{isVacant(primaryUnit) ? <button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: primaryUnit.id })}><CalendarPlus />{t("Buat pemesanan")}</button> : <button className="button" onClick={onViewReservations}><WalletCards />{locale === "en" ? "View active lease" : "Lihat sewa aktif"}</button>}</div></div>
@@ -976,7 +999,7 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
                 {groupUnits.map(row => {
                   const vacantUnit = isVacant(row);
                   const tenantName = String(row.penyewa || "").trim();
-                  return <button type="button" className="unit-card" key={row.id} onClick={() => setUnitDrawer(row)} aria-label={`${t("Detail unit")} ${v(row.unit)}`}>
+                  return <button type="button" className="unit-card" key={row.id} onClick={() => { setUnitDrawer(row); cancelUnitEdit(); }} aria-label={`${t("Detail unit")} ${v(row.unit)}`}>
                     <span className={`unit-card-status ${unitStatusTone(row.status)}`}><span />{v(row.status)}</span>
                     <strong className="unit-card-number">{v(row.unit)}</strong>
                     <span className="unit-card-tenant">{vacantUnit ? (locale === "en" ? "Available" : "Tersedia") : v(tenantName || row.status)}</span>
@@ -995,14 +1018,43 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
 
     {/* Unit side drawer */}
     {unitDrawer && <>
-      <button className="more-dismiss" aria-hidden="true" onClick={() => setUnitDrawer(null)} />
+      <button className="more-dismiss" aria-hidden="true" onClick={() => { setUnitDrawer(null); cancelUnitEdit(); }} />
       <aside className="unit-drawer" role="dialog" aria-modal="true" aria-label={`${t("Detail unit")} ${unitDrawer.unit}`}>
         <div className="unit-drawer-head">
           <div><h2>{t("Detail unit")} {v(unitDrawer.unit)}</h2><p>{v(unitDrawer.tipe)} · {t("Lantai")} {v(unitDrawer.lantai)}</p></div>
-          <button className="icon-button" aria-label={t("Tutup")} onClick={() => setUnitDrawer(null)}><X /></button>
+          <div className="unit-drawer-head-actions">
+            {!editUnitMode && <button className="icon-button" aria-label={t("Edit")} onClick={() => openUnitEdit(unitDrawer)}><Pencil /></button>}
+            <button className="icon-button" aria-label={t("Tutup")} onClick={() => { setUnitDrawer(null); cancelUnitEdit(); }}><X /></button>
+          </div>
         </div>
         <div className="unit-drawer-body">
-          <div className="detail-section"><div className="detail-title">{t("Status hunian")} <Status>{unitDrawer.status}</Status></div><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(unitDrawer.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(unitDrawer.sewa)}</span><span>Deposit</span><span>{v(unitDrawer.deposit || formatRp(unitDeposit(unitDrawer, property)))}</span><span>{t("Tunggakan")}</span><span className={unitDrawer.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(unitDrawer.tunggakan)}</span><span>{t("Nomor meter")}</span><span>{v(unitDrawer.meter || "-")}</span></div>{isVacant(unitDrawer) && <button className="button primary unit-booking-action" onClick={() => { setUnitDrawer(null); onBook({ propertyId: property.id, unitId: unitDrawer.id }); }}><CalendarPlus />{t("Pesan unit ini")}</button>}</div>
+          <div className="detail-section"><div className="detail-title">{t("Status hunian")} <Status>{unitDrawer.status}</Status></div>
+            {editUnitMode ? (
+              <form className="unit-edit-form" onSubmit={(e) => { e.preventDefault(); saveUnitEdit(unitDrawer); }}>
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label htmlFor="ue-sewa">{t("Sewa per bulan")}</label>
+                    <div className="money-input"><span>Rp</span><input id="ue-sewa" type="number" inputMode="numeric" min="0" step="1000" value={editUnitForm.sewa} onChange={e => setEditUnitForm(f => ({ ...f, sewa: e.target.value }))} /></div>
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="ue-deposit">Deposit</label>
+                    <div className="money-input"><span>Rp</span><input id="ue-deposit" type="number" inputMode="numeric" min="0" step="1000" value={editUnitForm.deposit} onChange={e => setEditUnitForm(f => ({ ...f, deposit: e.target.value }))} /></div>
+                  </div>
+                  <div className="form-field full">
+                    <label htmlFor="ue-tunggakan">{t("Tunggakan")}</label>
+                    <div className="money-input"><span>Rp</span><input id="ue-tunggakan" type="number" inputMode="numeric" min="0" step="1000" value={editUnitForm.tunggakan} onChange={e => setEditUnitForm(f => ({ ...f, tunggakan: e.target.value }))} /></div>
+                  </div>
+                </div>
+                <div className="unit-edit-actions">
+                  <button type="button" className="button" onClick={cancelUnitEdit}>{t("Batal")}</button>
+                  <button type="submit" className="button primary">{t("Simpan perubahan")}</button>
+                </div>
+              </form>
+            ) : (
+              <div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(unitDrawer.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(unitDrawer.sewa)}</span><span>Deposit</span><span>{v(unitDrawer.deposit || formatRp(unitDeposit(unitDrawer, property)))}</span><span>{t("Tunggakan")}</span><span className={unitDrawer.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(unitDrawer.tunggakan)}</span><span>{t("Nomor meter")}</span><span>{v(unitDrawer.meter || "-")}</span></div>
+            )}
+            {!editUnitMode && isVacant(unitDrawer) && <button className="button primary unit-booking-action" onClick={() => { setUnitDrawer(null); cancelUnitEdit(); onBook({ propertyId: property.id, unitId: unitDrawer.id }); }}><CalendarPlus />{t("Pesan unit ini")}</button>}
+          </div>
           <div className="detail-section"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div>
         </div>
       </aside>
