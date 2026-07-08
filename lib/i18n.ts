@@ -159,6 +159,8 @@ const english: Record<string, string> = {
   "Tidak ada jadwal mendatang.": "No upcoming schedule.",
   "Draf kontrak dibuat. Lengkapi dan tandatangani di modul Kontrak.": "Contract draft created. Complete and sign it in the Contracts module.",
   "Buka kontrak": "Open contract",
+  "Ketentuan penghuni": "Occupancy terms", "Pembatasan gender": "Gender restriction", "Campur (putra & putri)": "Mixed (all genders)", "Putra saja": "Male only", "Putri saja": "Female only", "Membatasi penyewa yang dapat booking ke properti ini.": "Restricts which tenants can reserve this property.",
+  "Jenis kelamin": "Gender", "Laki-laki": "Male", "Perempuan": "Female", "Belum diisi": "Not set",
 };
 
 const months: Record<string, string> = { Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr", Mei: "May", Jun: "Jun", Jul: "Jul", Agu: "Aug", Sep: "Sep", Okt: "Oct", Nov: "Nov", Des: "Dec" };

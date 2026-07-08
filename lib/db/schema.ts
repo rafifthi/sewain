@@ -77,6 +77,7 @@ export const properties = sqliteTable("properties", {
   billingCycle: text("billingCycle"),
   image: text("image"),
   imageName: text("imageName"),
+  genderRestriction: text("genderRestriction"), // "" (campur) | "Putra" | "Putri"
 });
 
 export const units = sqliteTable("units", {
@@ -108,6 +109,7 @@ export const tenants = sqliteTable("tenants", {
   sejak: text("sejak"),
   periodeSewa: text("periodeSewa"),
   status: text("status"),
+  jenisKelamin: text("jenisKelamin"), // "Laki-laki" | "Perempuan"
 });
 
 export const reservations = sqliteTable("reservations", {
