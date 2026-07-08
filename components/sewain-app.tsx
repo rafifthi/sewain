@@ -733,7 +733,7 @@ function Dashboard({ go, reservations, properties, invoices, tickets, loading, o
         </section>
       </div>
       <aside className="detail-pane"><div className="panel-head"><div><h2>{t("Aktivitas terbaru")}</h2><p>{t("Perlu ditindaklanjuti")}</p></div></div><div className="detail-section">
-        {activity.length ? activity.map(([title, desc, time], i) => <div className="activity" key={`${title}-${i}`}><span className="activity-icon"><Check /></span><span><strong>{title}</strong><span className="cell-sub">{desc}</span></span>{time && <time>{time}</time>}</div>) : <div className="inline-empty">{locale === "en" ? "Nothing needs attention right now." : "Tidak ada yang perlu ditindaklanjuti saat ini."}</div>}
+        {loading ? null : activity.length ? activity.map(([title, desc, time], i) => <div className="activity" key={`${title}-${i}`}><span className="activity-icon"><Check /></span><span><strong>{title}</strong><span className="cell-sub">{desc}</span></span>{time && <time>{time}</time>}</div>) : <div className="inline-empty">{locale === "en" ? "Nothing needs attention right now." : "Tidak ada yang perlu ditindaklanjuti saat ini."}</div>}
       </div><div className="detail-section"><div className="detail-title">{t("Jadwal mendatang")}<button className="text-button" style={{ marginLeft: "auto" }} onClick={() => go("reservations")}>{t("Reservasi")}</button></div>{upcoming.length ? <div className="detail-grid">{upcoming.map(([label, when], i) => <Fragment key={i}><span>{label}</span><span>{when}</span></Fragment>)}</div> : <div className="inline-empty">{t("Tidak ada jadwal mendatang.")}</div>}</div></aside>
     </div>
   </>;
@@ -1495,7 +1495,7 @@ function SewainContent() {
   const [templates, setTemplates] = useStoredState<MessageTemplate[]>("message-templates-v1", SEED_TEMPLATES);
   const [contractTemplates, setContractTemplates] = useStoredConfig<ContractTemplate[]>("contract-templates-v1", SEED_CONTRACT_TEMPLATES);
   const [integrationConfig, setIntegrationConfig] = useStoredConfig<IntegrationConfig>("sewain-integration", defaultIntegrationConfig);
-  const [tickets, setTickets] = useDbRows("tickets");
+  const [tickets, setTickets, ticketsLoading] = useDbRows("tickets");
   const [documents, setDocuments] = useDbRows("documents");
   const [units, setUnits] = useDbRows("units");
   const [roles, setRoles] = useStoredState<Role[]>("roles-v1", SEED_ROLES);
@@ -1644,7 +1644,7 @@ function SewainContent() {
     <Sidebar sidebarCollapsed={sidebarCollapsed} toggleSidebar={toggleSidebar} locale={locale} setLocale={setLocale} page={page} go={go} navAllowed={navAllowed} access={access} t={t} mobileNav={mobileNav} setMobileNav={setMobileNav} />
     <div className="shell"><Topbar toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} t={t} setMobileNav={setMobileNav} page={page} go={go} access={access} setActingAsOpen={setActingAsOpen} actingAsOpen={actingAsOpen} actingAsRef={actingAsRef} locale={locale} notificationsRef={notificationsRef} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} notificationItems={notificationItems} readNotifications={readNotifications} rememberRead={rememberRead} openNotification={openNotification} onOpenSearch={() => setPaletteOpen(true)} />
       <main className="main" id="main-content">
-        {page === "dashboard" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading} onLoadDemo={loadDemoData} />)}
+        {page === "dashboard" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading || reservationsLoading || ticketsLoading} onLoadDemo={loadDemoData} />)}
         {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} invoices={invoiceRows} reservations={reservations} tickets={tickets} />}
         {page === "properties" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} loading={propertiesLoading} />)}
         {page === "tenants" && (isErrorState("tenants", tenantsLoading) ? <ErrorState onRetry={handleRetry} /> : <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} loading={tenantsLoading} />)}

@@ -69,7 +69,7 @@ export function Dashboard({ go, reservations, loading = false }: { go: (p: PageI
         {showLoading
           ? null
           : activityRows.length
-            ? activityRows.map((a, i) => <div className="activity" key={`${a.title}-${i}`}><span className="activity-icon"><Check /></span><span><strong>{t(a.title)}</strong><span className="cell-sub">{t(a.desc)}</span></span><time>{t(a.time)}</time></div>)
+            ? activityRows.map((a, i) => <div className="activity" key={`${a.title}-${i}`}><span className="activity-icon"><Check /></span><span><strong>{t(a.title)}</strong><span className="cell-sub">{a.desc}</span></span><time>{t(a.time)}</time></div>)
             : <div className="inline-empty">{t("Belum ada aktivitas terbaru.")}</div>}
       </div><div className="detail-section"><div className="detail-title">{t("Jadwal mendatang")}<button className="text-button" style={{ marginLeft: "auto" }} onClick={() => go("reservations")}>{t("Reservasi")}</button></div>{upcoming.length ? <div className="detail-grid">{upcoming.map(([label, when], i) => <Fragment key={i}><span>{label}</span><span>{when}</span></Fragment>)}</div> : <div className="inline-empty">{t("Tidak ada jadwal mendatang.")}</div>}</div></aside>
     </div>
