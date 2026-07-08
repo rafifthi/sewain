@@ -750,6 +750,15 @@ p { margin: 0; text-wrap: pretty; }
 .unit-drawer-body { flex: 1; overflow-y: auto; }
 .unit-drawer-body .detail-section { padding: 20px 24px; border-bottom: 1px solid var(--border); }
 .unit-drawer-body .detail-section:last-child { border-bottom: 0; }
+.unit-drawer-head-actions { display: flex; align-items: center; gap: 4px; }
+.unit-edit-form { padding: 4px 0; }
+.unit-edit-form .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0; margin: 0; }
+.unit-edit-form .form-field { min-width: 0; }
+.unit-edit-form .form-field.full { grid-column: 1 / -1; }
+.unit-edit-form .money-input { display: flex; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.unit-edit-form .money-input span { padding: 0 10px; color: var(--muted); font-size: .875rem; font-weight: 600; background: var(--surface-3); border-right: 1px solid var(--border); line-height: 2.25rem; }
+.unit-edit-form .money-input input { flex: 1; border: 0; border-radius: 0; padding: 0 10px; min-width: 0; background: var(--surface-2); }
+.unit-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 
 /* More popover */
 .more-menu-wrap { position: relative; }
