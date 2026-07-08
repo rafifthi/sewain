@@ -1089,6 +1089,10 @@ tbody tr.selected { background: var(--primary-soft); }
 .booking-notice span { display: grid; }
 .booking-notice strong { font-size: 0.8125rem; }
 .booking-notice small { margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
+.gender-notice { background: #fff4e5; border-color: #f0b429; }
+.gender-notice > svg { color: #b7791f; }
+.gender-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #fff4e5; color: #b7791f; font-size: 0.7rem; font-weight: 700; border: 1px solid #f0b429; }
+.field-hint { margin-top: 4px; color: var(--muted); font-size: 0.72rem; }
 .identity-upload img { width: 176px; height: 110px; }
 .dialog-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 22px 24px; border-bottom: 1px solid var(--border); }
 .dialog-head p { margin-top: 4px; color: var(--muted); font-size: 0.8125rem; }

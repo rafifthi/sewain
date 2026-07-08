@@ -121,6 +121,23 @@ export async function initDb() {
     }
   }
 
+  // New columns added after a table already existed are not picked up by
+  // CREATE TABLE IF NOT EXISTS. Reconcile them here so existing databases
+  // (and the Turso remote) get the gender fields without a full migration.
+  const GENDER_COLUMNS: Record<string, string[]> = {
+    properties: ["genderRestriction"],
+    tenants: ["jenisKelamin"],
+  };
+  for (const [table, columns] of Object.entries(GENDER_COLUMNS)) {
+    const existing = await client.execute(`PRAGMA table_info(${table})`);
+    const present = new Set(existing.rows.map((r) => String(r.name)));
+    for (const column of columns) {
+      if (!present.has(column)) {
+        await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+      }
+    }
+  }
+
   client.close();
 }
 
