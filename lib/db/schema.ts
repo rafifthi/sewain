@@ -195,6 +195,8 @@ export const tickets = sqliteTable("tickets", {
   status: text("status"),
   createdAt: text("createdAt"),
   assignedAt: text("assignedAt"),
+  laporanVendor: text("laporanVendor"), // vendor completion report (catatan penyelesaian)
+  tanggalSelesai: text("tanggalSelesai"), // ISO date string (YYYY-MM-DD) pekerjaan selesai
 });
 
 export const vendors = sqliteTable("vendors", {

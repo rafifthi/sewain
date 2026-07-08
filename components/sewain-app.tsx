@@ -1317,7 +1317,7 @@ function TicketDialog({ state, onClose, onSave }: { state: Exclude<DialogState, 
   const { locale, t } = useI18n();
   const { properties } = useTokenConfig();
   const row = state.row;
-  const [values, setValues] = useState({ tiket: String(row?.tiket || `TKT-${String(Date.now()).slice(-4)}`), judul: String(row?.judul || ""), properti: String(row?.properti || ""), unit: String(row?.unit || ""), penyewa: String(row?.penyewa || ""), telepon: String(row?.telepon || ""), masalah: String(row?.masalah || ""), vendor: String(row?.vendor || "Belum ditugaskan"), status: String(row?.status || "Baru") });
+  const [values, setValues] = useState({ tiket: String(row?.tiket || `TKT-${String(Date.now()).slice(-4)}`), judul: String(row?.judul || ""), properti: String(row?.properti || ""), unit: String(row?.unit || ""), penyewa: String(row?.penyewa || ""), telepon: String(row?.telepon || ""), masalah: String(row?.masalah || ""), vendor: String(row?.vendor || "Belum ditugaskan"), status: String(row?.status || "Baru"), laporanVendor: String(row?.laporanVendor || ""), tanggalSelesai: String(row?.tanggalSelesai || "") });
   const [proofs, setProofs] = useState<string[]>(String(row?.bukti || "").split("|").filter(Boolean));
   const [error, setError] = useState("");
   const optionValues = (items: unknown[], current: string) => Array.from(new Set([current, ...items.map(String)].filter(Boolean)));
@@ -1342,9 +1342,14 @@ function TicketDialog({ state, onClose, onSave }: { state: Exclude<DialogState, 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     const now = new Date().toISOString();
+    const isSelesai = values.status === "Selesai";
+    const laporanVendor = isSelesai ? String(values.laporanVendor || "").trim() : "";
+    const tanggalSelesai = isSelesai ? (values.tanggalSelesai || todayInput()) : "";
     onSave("tickets", {
       id: row?.id || `tickets-${Date.now()}`,
       ...values,
+      laporanVendor,
+      tanggalSelesai,
       bukti: proofs.join("|"),
       createdAt: row?.createdAt || now,
       assignedAt: row?.assignedAt || (values.status === "Ditugaskan" ? now : ""),
@@ -1359,8 +1364,10 @@ function TicketDialog({ state, onClose, onSave }: { state: Exclude<DialogState, 
       <div className="form-field full"><label htmlFor="ticket-issue">{t("Masalah")}</label><div className="rich-editor"><div className="rich-toolbar" aria-label={locale === "en" ? "Text formatting" : "Format teks"}><button type="button" onClick={() => format("**")} aria-label="Bold"><Bold /></button><button type="button" onClick={() => format("_")} aria-label="Italic"><Italic /></button><button type="button" onClick={() => format("- ", "")} aria-label="List"><List /></button></div><textarea id="ticket-issue" value={values.masalah} onChange={event => update("masalah", event.target.value)} required rows={7} placeholder={locale === "en" ? "Describe the issue, checks already performed, and access notes..." : "Jelaskan masalah, pemeriksaan yang sudah dilakukan, dan catatan akses..."} /></div></div>
       <div className="form-field full"><label>{locale === "en" ? "Image proof" : "Bukti gambar"}</label><div className="proof-uploader">{proofs.map((src, index) => <div className="proof-preview" key={index}><img src={src} alt={`${locale === "en" ? "Proof" : "Bukti"} ${index + 1}`} /><button type="button" aria-label={t("Hapus")} onClick={() => setProofs(current => current.filter((_, item) => item !== index))}><X /></button></div>)}{proofs.length < 4 && <label className="proof-add"><ImagePlus /><span>{locale === "en" ? "Add photos" : "Tambah foto"}</span><small>JPG, PNG, WebP · 800 KB</small><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={event => addProofs(event.target.files)} /></label>}</div></div>
       <div className="form-field"><label htmlFor="ticket-vendor">{t("Vendor")}</label><select id="ticket-vendor" value={values.vendor} onChange={event => update("vendor", event.target.value)} required>{vendorOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></div><div className="form-field"><label htmlFor="ticket-status">{t("Status")}</label><select id="ticket-status" value={values.status} onChange={event => update("status", event.target.value)}>{ticketStages.map(stage => <option key={stage} value={stage}>{t(stage)}</option>)}</select></div>
-    </div>{error && <p className="form-error" role="alert">{error}</p>}</div>
-    <div className="dialog-actions">{row && <button type="button" className="button danger" onClick={() => onSave("tickets", { ...row, _delete: 1 })}>{t("Hapus")}</button>}<span className="dialog-spacer" /><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button type="submit" className="button primary">{t(state.mode === "create" ? "Tambahkan" : "Simpan perubahan")}</button></div>
+    </div>
+    {values.status === "Selesai" && <div className="vendor-report-section"><h3><FileText />{t("Laporan vendor")}</h3><div className="form-field full"><label htmlFor="ticket-report">{t("Catatan penyelesaian")}</label><textarea id="ticket-report" value={values.laporanVendor} onChange={event => update("laporanVendor", event.target.value)} rows={4} placeholder={t("Tuliskan ringkasan pekerjaan yang telah selesai.")} /></div><div className="form-field"><label htmlFor="ticket-done">{t("Tanggal selesai")}</label><input id="ticket-done" type="date" value={values.tanggalSelesai} onChange={event => update("tanggalSelesai", event.target.value)} /></div></div>}
+    {error && <p className="form-error" role="alert">{error}</p>}</div>
+    <div className="dialog-actions">{row && <button type="button" className="button danger" onClick={() => onSave("tickets", { ...row, _delete: 1 })}>{t("Hapus")}</button>}<span className="dialog-spacer" /><button type="button" className="button" onClick={onClose}>{t("Batal")}</button><button type="submit" className="button primary" disabled={values.status === "Selesai" && !values.laporanVendor.trim()}>{t(state.mode === "create" ? "Tambahkan" : "Simpan perubahan")}</button></div>
   </form></div>;
 }
 

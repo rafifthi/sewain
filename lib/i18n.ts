@@ -161,6 +161,8 @@ const english: Record<string, string> = {
   "Buka kontrak": "Open contract",
   "Ketentuan penghuni": "Occupancy terms", "Pembatasan gender": "Gender restriction", "Campur (putra & putri)": "Mixed (all genders)", "Putra saja": "Male only", "Putri saja": "Female only", "Membatasi penyewa yang dapat booking ke properti ini.": "Restricts which tenants can reserve this property.",
   "Jenis kelamin": "Gender", "Laki-laki": "Male", "Perempuan": "Female", "Belum diisi": "Not set",
+  "Laporan vendor": "Vendor report", "Laporan terkirim": "Report submitted", "Tanggal selesai": "Completion date",
+  "Catatan penyelesaian": "Completion notes", "Kirim laporan": "Submit report", "Tuliskan ringkasan pekerjaan yang telah selesai.": "Summarize the work that was completed.",
 };
 
 const months: Record<string, string> = { Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr", Mei: "May", Jun: "Jun", Jul: "Jul", Agu: "Aug", Sep: "Sep", Okt: "Oct", Nov: "Nov", Des: "Dec" };
