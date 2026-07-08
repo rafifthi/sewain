@@ -758,7 +758,7 @@ function PropertyCard({ row, onOpen }: { row: Row; onOpen: () => void }) {
   </article>;
 }
 
-function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onBook, onViewReservations, openDialog, notify, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
+function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, reservations, onBook, onViewReservations, openDialog, notify, loading = false }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; reservations: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const { locale, t, v } = useI18n();
   const [selected, setSelected] = useState<Row | null>(null);
   const [search, setSearch] = useState("");
@@ -774,14 +774,14 @@ function PropertiesPage({ rows, setRows, units, setUnits, invoices, tickets, onB
     return matchesSearch && (filter === "Semua" || filter === unitType || rowLabels.includes(filter));
   });
   const liveSelected = selected ? rows.find(r => r.id === selected.id) || selected : null;
-  if (liveSelected) return <PropertyDetail property={liveSelected} units={units} setUnits={setUnits} setProperties={setRows} invoices={invoices} tickets={tickets} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} openDialog={openDialog} notify={notify} loading={loading} />;
+  if (liveSelected) return <PropertyDetail property={liveSelected} units={units} setUnits={setUnits} setProperties={setRows} invoices={invoices} tickets={tickets} reservations={reservations} onBook={onBook} onViewReservations={onViewReservations} onBack={() => setSelected(null)} openDialog={openDialog} notify={notify} loading={loading} />;
   return <><PageHead page="properties" action={() => openDialog({ mode: "create", page: "properties" })} />
     <div className="property-list-toolbar"><div className="field-inline"><Search /><input type="search" enterKeyHint="search" aria-label={t("Cari properti")} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Cari properti...")} /></div><div className="property-filter-list" aria-label={t("Filter properti")}>{filters.map(item => <button type="button" className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>{v(item)}</button>)}</div></div>
     {loading ? <section className="property-grid skeleton-transition">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} withImage contentLines={2} />)}</section> : filtered.length ? <section className="property-grid">{filtered.map(row => <PropertyCard key={row.id} row={row} onOpen={() => setSelected(row)} />)}</section> : <div className="property-empty"><Building2 /><strong>{t("Properti tidak ditemukan")}</strong><span>{t("Ubah pencarian atau filter untuk melihat properti lain.")}</span></div>}
   </>;
 }
 
-function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, onBook, onViewReservations, onBack, openDialog, notify, loading = false }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
+function PropertyDetail({ property, units, setUnits, setProperties, invoices, tickets, reservations, onBook, onViewReservations, onBack, openDialog, notify, loading = false }: { property: Row; units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>; setProperties: React.Dispatch<React.SetStateAction<Row[]>>; invoices: Row[]; tickets: Row[]; reservations: Row[]; onBook: (ctx: BookingState) => void; onViewReservations: () => void; onBack: () => void; openDialog: (d: DialogState) => void; notify: (s: string) => void; loading?: boolean }) {
   const confirm = useConfirm();
   const { locale, t, v } = useI18n();
   const [activeTab, setActiveTab] = useState<"units" | "invoices" | "tickets">("units");
@@ -790,11 +790,11 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
   const [collapsedFloors, setCollapsedFloors] = useState<string[]>([]);
   const [unitDrawer, setUnitDrawer] = useState<Row | null>(null);
   const [editUnitMode, setEditUnitMode] = useState(false);
-  const [editUnitForm, setEditUnitForm] = useState({ sewa: "", deposit: "", tunggakan: "" });
+  const [editUnitForm, setEditUnitForm] = useState({ sewa: "", deposit: "", tunggakan: "", kapasitas: "1" });
   const [showMore, setShowMore] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [addUnit, setAddUnit] = useState(false);
-  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "" });
+  const [unitForm, setUnitForm] = useState({ unit: "", tipe: "Standar", lantai: "1", sewa: "", deposit: "", kapasitas: "1" });
 
   if (loading) return <SkeletonPropertyDetail />;
   const propertyUnits = unitsForProperty(units, property);
@@ -899,28 +899,32 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
   };
   const handleAddUnit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newUnit: Row = { id: `unit-${Date.now()}`, unit: unitForm.unit, tipe: unitForm.tipe, lantai: unitForm.lantai, penyewa: "Belum ada", status: "Kosong", sewa: unitForm.sewa ? formatRp(rupiah(unitForm.sewa)) : "Rp0", deposit: unitForm.deposit ? formatRp(rupiah(unitForm.deposit)) : "Rp0", tunggakan: "Rp0", meter: "-", _propertiId: property.id };
+    const kapasitas = Math.max(1, Number(unitForm.kapasitas) || 1);
+    const newUnit: Row = { id: `unit-${Date.now()}`, unit: unitForm.unit, tipe: unitForm.tipe, lantai: unitForm.lantai, penyewa: "Belum ada", status: "Kosong", sewa: unitForm.sewa ? formatRp(rupiah(unitForm.sewa)) : "Rp0", deposit: unitForm.deposit ? formatRp(rupiah(unitForm.deposit)) : "Rp0", tunggakan: "Rp0", meter: "-", kapasitas, _propertiId: property.id };
     const nextUnits = [...units, newUnit];
     setUnits(nextUnits);
     setProperties(old => old.map(p => p.id === property.id ? { ...p, unit: Number(p.unit || 1) + 1, unitGroups: Array.from(new Set([...unitGroupNames, unitForm.lantai].filter(Boolean))).join("|") } : p));
     notify(locale === "en" ? "Unit added." : "Unit berhasil ditambahkan.");
     setAddUnit(false);
-    setUnitForm({ unit: "", tipe: "Standar", lantai: unitForm.lantai, sewa: "", deposit: "" });
+    setUnitForm({ unit: "", tipe: "Standar", lantai: unitForm.lantai, sewa: "", deposit: "", kapasitas: "1" });
   };
   const openUnitEdit = (row: Row) => {
     setEditUnitForm({
       sewa: String(rupiah(row.sewa) || ""),
       deposit: String(rupiah(row.deposit) || ""),
       tunggakan: String(rupiah(row.tunggakan) || ""),
+      kapasitas: String(Number(row.kapasitas) || 1),
     });
     setEditUnitMode(true);
   };
   const saveUnitEdit = (row: Row) => {
+    const kapasitas = Math.max(1, Number(editUnitForm.kapasitas) || 1);
     setUnits(old => old.map(u => u.id === row.id ? {
       ...u,
       sewa: editUnitForm.sewa ? formatRp(rupiah(editUnitForm.sewa)) : "Rp0",
       deposit: editUnitForm.deposit ? formatRp(rupiah(editUnitForm.deposit)) : "Rp0",
       tunggakan: editUnitForm.tunggakan ? formatRp(rupiah(editUnitForm.tunggakan)) : "Rp0",
+      kapasitas,
     } : u));
     setEditUnitMode(false);
     notify(locale === "en" ? "Unit updated." : "Unit berhasil diperbarui.");
@@ -931,7 +935,7 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
 
   const singleUnitView = primaryUnit ? <section className="single-unit-panel">
     <div className="single-unit-head"><div><span className="eyebrow">{locale === "en" ? "Primary unit" : "Unit utama"}</span><h2>{v(property.nama)}</h2><p>{v(primaryUnit.tipe)} · {t("Lantai")} {v(primaryUnit.lantai)}</p></div><div className="single-unit-head-actions"><Status>{primaryUnit.status}</Status>{isVacant(primaryUnit) ? <button className="button primary" onClick={() => onBook({ propertyId: property.id, unitId: primaryUnit.id })}><CalendarPlus />{t("Buat pemesanan")}</button> : <button className="button" onClick={onViewReservations}><WalletCards />{locale === "en" ? "View active lease" : "Lihat sewa aktif"}</button>}</div></div>
-    <div className="single-unit-facts"><section><span>{locale === "en" ? "Occupancy" : "Hunian"}</span><dl><div><dt>{t("Penyewa")}</dt><dd>{v(primaryUnit.penyewa)}</dd></div><div><dt>{t("Status")}</dt><dd>{v(primaryUnit.status)}</dd></div></dl></section><section><span>{locale === "en" ? "Pricing" : "Harga"}</span><dl><div><dt>{t("Sewa per bulan")}</dt><dd>{v(primaryUnit.sewa)}</dd></div><div><dt>Deposit</dt><dd>{v(primaryUnit.deposit || formatRp(unitDeposit(primaryUnit, property)))}</dd></div><div><dt>{t("Siklus penagihan")}</dt><dd>{v(property.billingCycle || "Bulanan")}</dd></div></dl></section><section><span>{locale === "en" ? "Utilities and balance" : "Utilitas dan saldo"}</span><dl><div><dt>{t("Nomor meter")}</dt><dd>{v(primaryUnit.meter || "-")}</dd></div><div><dt>{t("Tunggakan")}</dt><dd className={primaryUnit.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(primaryUnit.tunggakan || "Rp0")}</dd></div></dl></section></div>
+    <div className="single-unit-facts"><section><span>{locale === "en" ? "Occupancy" : "Hunian"}</span><dl><div><dt>{t("Penyewa")}</dt><dd>{v(primaryUnit.penyewa)}</dd></div><div><dt>{t("Status")}</dt><dd>{v(primaryUnit.status)}</dd></div><div><dt>{t("Kapasitas")}</dt><dd>{activeTenantCount(primaryUnit, reservations)}/{unitCapacity(primaryUnit)} {t("penyewa")}</dd></div></dl></section><section><span>{locale === "en" ? "Pricing" : "Harga"}</span><dl><div><dt>{t("Sewa per bulan")}</dt><dd>{v(primaryUnit.sewa)}</dd></div><div><dt>Deposit</dt><dd>{v(primaryUnit.deposit || formatRp(unitDeposit(primaryUnit, property)))}</dd></div><div><dt>{t("Siklus penagihan")}</dt><dd>{v(property.billingCycle || "Bulanan")}</dd></div></dl></section><section><span>{locale === "en" ? "Utilities and balance" : "Utilitas dan saldo"}</span><dl><div><dt>{t("Nomor meter")}</dt><dd>{v(primaryUnit.meter || "-")}</dd></div><div><dt>{t("Tunggakan")}</dt><dd className={primaryUnit.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(primaryUnit.tunggakan || "Rp0")}</dd></div></dl></section></div>
     <div className="single-unit-activity"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div>
   </section> : null;
 
@@ -1044,6 +1048,10 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
                     <label htmlFor="ue-tunggakan">{t("Tunggakan")}</label>
                     <div className="money-input"><span>Rp</span><input id="ue-tunggakan" type="number" inputMode="numeric" min="0" step="1000" value={editUnitForm.tunggakan} onChange={e => setEditUnitForm(f => ({ ...f, tunggakan: e.target.value }))} /></div>
                   </div>
+                  <div className="form-field full">
+                    <label htmlFor="ue-kapasitas">{t("Kapasitas penyewa")}</label>
+                    <input id="ue-kapasitas" type="number" inputMode="numeric" min="1" step="1" value={editUnitForm.kapasitas} onChange={e => setEditUnitForm(f => ({ ...f, kapasitas: e.target.value }))} />
+                  </div>
                 </div>
                 <div className="unit-edit-actions">
                   <button type="button" className="button" onClick={cancelUnitEdit}>{t("Batal")}</button>
@@ -1051,9 +1059,10 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
                 </div>
               </form>
             ) : (
-              <div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(unitDrawer.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(unitDrawer.sewa)}</span><span>Deposit</span><span>{v(unitDrawer.deposit || formatRp(unitDeposit(unitDrawer, property)))}</span><span>{t("Tunggakan")}</span><span className={unitDrawer.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(unitDrawer.tunggakan)}</span><span>{t("Nomor meter")}</span><span>{v(unitDrawer.meter || "-")}</span></div>
+              <><div className="detail-grid"><span>{t("Penyewa")}</span><span>{v(unitDrawer.penyewa)}</span><span>{t("Sewa per bulan")}</span><span>{v(unitDrawer.sewa)}</span><span>Deposit</span><span>{v(unitDrawer.deposit || formatRp(unitDeposit(unitDrawer, property)))}</span><span>{t("Tunggakan")}</span><span className={unitDrawer.tunggakan !== "Rp0" ? "money-danger" : ""}>{v(unitDrawer.tunggakan)}</span><span>{t("Nomor meter")}</span><span>{v(unitDrawer.meter || "-")}</span></div>
+              <div className="capacity-line"><span>{t("Kapasitas")}: {activeTenantCount(unitDrawer, reservations)}/{unitCapacity(unitDrawer)} {t("penyewa")}</span>{activeTenantCount(unitDrawer, reservations) >= unitCapacity(unitDrawer) && <span className="capacity-full">{t("Penuh")}</span>}</div></>
             )}
-            {!editUnitMode && isVacant(unitDrawer) && <button className="button primary unit-booking-action" onClick={() => { setUnitDrawer(null); cancelUnitEdit(); onBook({ propertyId: property.id, unitId: unitDrawer.id }); }}><CalendarPlus />{t("Pesan unit ini")}</button>}
+            {!editUnitMode && (isVacant(unitDrawer) || activeTenantCount(unitDrawer, reservations) < unitCapacity(unitDrawer)) && <button className="button primary unit-booking-action" onClick={() => { setUnitDrawer(null); cancelUnitEdit(); onBook({ propertyId: property.id, unitId: unitDrawer.id }); }}><CalendarPlus />{t("Pesan unit ini")}</button>}
           </div>
           <div className="detail-section"><div className="detail-title">{t("Aktivitas unit")}</div><div className="activity"><span className="activity-icon"><Check /></span><span><strong>{t("Inspeksi rutin selesai")}</strong><span className="cell-sub">{t("Tidak ada kerusakan")}</span></span><time>12 Jun</time></div><div className="activity"><span className="activity-icon"><CreditCard /></span><span><strong>{t("Tagihan Juni dibuat")}</strong><span className="cell-sub">{t("Jatuh tempo 5 Juni")}</span></span><time>1 Jun</time></div></div>
         </div>
@@ -1064,7 +1073,7 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
     {showDeleteConfirm && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setShowDeleteConfirm(false)}><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-property-title"><div className="dialog-head"><div><h2 id="delete-property-title">{locale === "en" ? "Delete property?" : "Hapus properti?"}</h2><p>{locale === "en" ? `This will permanently remove "${v(property.nama)}" and cannot be undone.` : `Tindakan ini akan menghapus "${v(property.nama)}" secara permanen dan tidak dapat dibatalkan.`}</p></div><button className="icon-button" aria-label={t("Tutup")} onClick={() => setShowDeleteConfirm(false)}><X /></button></div><div className="dialog-actions"><button className="button" onClick={() => setShowDeleteConfirm(false)}>{t("Batal")}</button><button className="button danger" onClick={handleDeleteProperty}><Trash2 />{locale === "en" ? "Delete" : "Hapus"}</button></div></div></div>}
 
     {/* Add unit dialog */}
-    {addUnit && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setAddUnit(false)}><form className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-unit-title" onSubmit={handleAddUnit}><div className="dialog-head"><div><h2 id="add-unit-title">{locale === "en" ? "Add unit" : "Tambah unit"}</h2><p>{locale === "en" ? "Add a new unit to this property." : "Tambahkan unit baru ke properti ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={() => setAddUnit(false)}><X /></button></div><div className="dialog-body"><div className="form-grid"><div className="form-field"><label htmlFor="au-unit">{locale === "en" ? "Unit name / number" : "Nama / nomor unit"}</label><input id="au-unit" value={unitForm.unit} onChange={e => setUnitForm(f => ({ ...f, unit: e.target.value }))} required /></div><div className="form-field"><label htmlFor="au-tipe">{locale === "en" ? "Type" : "Tipe"}</label><select id="au-tipe" value={unitForm.tipe} onChange={e => setUnitForm(f => ({ ...f, tipe: e.target.value }))}>{["Standar", "Deluxe", "Premium", "Studio"].map(o => <option key={o}>{o}</option>)}</select></div><div className="form-field"><label htmlFor="au-lantai">{locale === "en" ? "Group" : "Group"}</label><select id="au-lantai" value={unitForm.lantai} onChange={e => setUnitForm(f => ({ ...f, lantai: e.target.value }))}>{unitGroupNames.map(group => <option key={group} value={group}>{unitGroupLabel(group, t, v)}</option>)}</select></div><div className="form-field"><label htmlFor="au-sewa">{t("Sewa per bulan")}</label><div className="money-input"><span>Rp</span><input id="au-sewa" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.sewa} onChange={e => setUnitForm(f => ({ ...f, sewa: e.target.value }))} /></div></div><div className="form-field">  <label htmlFor="au-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="au-deposit" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.deposit} onChange={e => setUnitForm(f => ({ ...f, deposit: e.target.value }))} /></div></div></div></div><div className="dialog-actions"><button type="button" className="button" onClick={() => setAddUnit(false)}>{t("Batal")}</button><button type="submit" className="button primary"><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div></form></div>}
+    {addUnit && <div className="backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && setAddUnit(false)}><form className="dialog" role="dialog" aria-modal="true" aria-labelledby="add-unit-title" onSubmit={handleAddUnit}><div className="dialog-head"><div><h2 id="add-unit-title">{locale === "en" ? "Add unit" : "Tambah unit"}</h2><p>{locale === "en" ? "Add a new unit to this property." : "Tambahkan unit baru ke properti ini."}</p></div><button type="button" className="icon-button" aria-label={t("Tutup")} onClick={() => setAddUnit(false)}><X /></button></div><div className="dialog-body"><div className="form-grid"><div className="form-field"><label htmlFor="au-unit">{locale === "en" ? "Unit name / number" : "Nama / nomor unit"}</label><input id="au-unit" value={unitForm.unit} onChange={e => setUnitForm(f => ({ ...f, unit: e.target.value }))} required /></div><div className="form-field"><label htmlFor="au-tipe">{locale === "en" ? "Type" : "Tipe"}</label><select id="au-tipe" value={unitForm.tipe} onChange={e => setUnitForm(f => ({ ...f, tipe: e.target.value }))}>{["Standar", "Deluxe", "Premium", "Studio"].map(o => <option key={o}>{o}</option>)}</select></div><div className="form-field"><label htmlFor="au-lantai">{locale === "en" ? "Group" : "Group"}</label><select id="au-lantai" value={unitForm.lantai} onChange={e => setUnitForm(f => ({ ...f, lantai: e.target.value }))}>{unitGroupNames.map(group => <option key={group} value={group}>{unitGroupLabel(group, t, v)}</option>)}</select></div><div className="form-field"><label htmlFor="au-sewa">{t("Sewa per bulan")}</label><div className="money-input"><span>Rp</span><input id="au-sewa" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.sewa} onChange={e => setUnitForm(f => ({ ...f, sewa: e.target.value }))} /></div></div><div className="form-field">  <label htmlFor="au-deposit">Deposit</label><div className="money-input"><span>Rp</span><input id="au-deposit" type="number" inputMode="numeric" min="0" step="1000" value={unitForm.deposit} onChange={e => setUnitForm(f => ({ ...f, deposit: e.target.value }))} /></div></div><div className="form-field"><label htmlFor="au-kapasitas">{t("Kapasitas penyewa")}</label><input id="au-kapasitas" type="number" inputMode="numeric" min="1" step="1" value={unitForm.kapasitas} onChange={e => setUnitForm(f => ({ ...f, kapasitas: e.target.value }))} /></div></div></div><div className="dialog-actions"><button type="button" className="button" onClick={() => setAddUnit(false)}>{t("Batal")}</button><button type="submit" className="button primary"><Plus />{locale === "en" ? "Add unit" : "Tambah unit"}</button></div></form></div>}
   </>;
 }
 
@@ -1073,11 +1082,30 @@ function PropertyDetail({ property, units, setUnits, setProperties, invoices, ti
 export const unitRent = (unit?: Row, property?: Row) => rupiah(unit?.sewa) || rupiah(property?.defaultPrice);
 export const unitDeposit = (unit?: Row, property?: Row) => rupiah(unit?.deposit) || rupiah(property?.defaultDeposit) || unitRent(unit, property);
 
+/** Max tenant capacity for a unit. Null/0/undefined → default 1. */
+export function unitCapacity(unit?: Row): number {
+  const n = Number(unit?.kapasitas);
+  return n && n > 0 ? n : 1;
+}
+
+/**
+ * Number of currently active tenants in a unit.
+ * Counts reservations linked to the unit with an active status; falls back to 1
+ * when the unit itself is occupied (Dihuni) but no reservation rows exist yet.
+ */
+export function activeTenantCount(unit?: Row, reservations: Row[] = []): number {
+  if (!unit) return 0;
+  const linked = reservations.filter(r => String(r._unitId) === String(unit.id) && /dihuni|aktif|booking|dipesan/i.test(String(r.status)));
+  if (linked.length) return linked.length;
+  return /dihuni/i.test(String(unit.status)) ? 1 : 0;
+}
+
 type BookingDialogProps = {
   ctx: BookingState;
   properties: Row[];
   units: Row[]; setUnits: React.Dispatch<React.SetStateAction<Row[]>>;
   tenants: Row[]; setTenants: React.Dispatch<React.SetStateAction<Row[]>>;
+  reservations: Row[];
   setReservations: React.Dispatch<React.SetStateAction<Row[]>>;
   onClose: () => void; onCreated: (id: string) => void; notify: (s: string) => void;
 };
@@ -1384,12 +1412,12 @@ function TokenOrderDialog(props: { state: Exclude<DialogState, null>; onClose: (
   return <GenericEditDialog {...props} />;
 }
 
-function BookingDialog({ ctx, properties, units, setUnits, tenants, setTenants, setReservations, onClose, onCreated, notify }: BookingDialogProps) {
+function BookingDialog({ ctx, properties, units, setUnits, tenants, setTenants, reservations, setReservations, onClose, onCreated, notify }: BookingDialogProps) {
   const { locale, t } = useI18n();
   const initialProperty = ctx.propertyId || properties[0]?.id || "";
   const [propertyId, setPropertyId] = useState(initialProperty);
   const selectedProperty = properties.find(property => property.id === propertyId);
-  const selectableUnits = unitsForProperty(units, selectedProperty).filter(unit => isVacant(unit) || unit.id === ctx.unitId);
+  const selectableUnits = unitsForProperty(units, selectedProperty).filter(unit => unit.id === ctx.unitId || isVacant(unit) || activeTenantCount(unit, reservations) < unitCapacity(unit));
   const [unitId, setUnitId] = useState(ctx.unitId || selectableUnits[0]?.id || "");
   const [tenantId, setTenantId] = useState(tenants.find(tenant => !tenant.unit)?.id || tenants[0]?.id || "");
   const selectedUnit = selectableUnits.find(unit => unit.id === unitId);
@@ -1417,6 +1445,12 @@ function BookingDialog({ ctx, properties, units, setUnits, tenants, setTenants, 
     const tenantGender = String(selectedTenant.jenisKelamin || "");
     if (restriction && tenantGender && tenantGender !== restriction) {
       notify(locale === "en" ? `This property is ${restriction}-only. ${selectedTenant.nama} is ${tenantGender}.` : `Properti ini khusus ${restriction}. ${selectedTenant.nama} berjenis kelamin ${tenantGender}.`);
+      return;
+    }
+    const capacity = unitCapacity(selectedUnit);
+    const active = activeTenantCount(selectedUnit, reservations);
+    if (active >= capacity) {
+      notify(locale === "en" ? `Unit is full (capacity ${capacity}).` : `Unit sudah penuh (kapasitas ${capacity}).`);
       return;
     }
     const start = parseInput(todayInput());
@@ -1453,7 +1487,7 @@ function BookingDialog({ ctx, properties, units, setUnits, tenants, setTenants, 
         {selectedProperty?.genderRestriction && <div className="booking-notice gender-notice"><UserRound /><span><strong>{t("Pembatasan gender")}: {t(String(selectedProperty.genderRestriction))}</strong><small>{t("Hanya penyewa dengan jenis kelamin sesuai yang dapat menempati properti ini.")}</small></span></div>}
         <div className="form-grid">
         <div className="form-field"><label htmlFor="booking-property">{t("Properti")}</label><select id="booking-property" value={propertyId} onChange={event => changeProperty(event.target.value)} required>{properties.map(property => <option key={property.id} value={property.id}>{String(property.nama)}</option>)}</select></div>
-        <div className="form-field"><label htmlFor="booking-unit">{t("Unit")}</label><select id="booking-unit" value={unitId} onChange={event => setUnitId(event.target.value)} required>{selectableUnits.map(unit => <option key={unit.id} value={unit.id}>{unitLabelFor(selectedProperty, unit)}</option>)}</select></div>
+        <div className="form-field"><label htmlFor="booking-unit">{t("Unit")}</label><select id="booking-unit" value={unitId} onChange={event => setUnitId(event.target.value)} required>{selectableUnits.map(unit => { const full = activeTenantCount(unit, reservations) >= unitCapacity(unit); return <option key={unit.id} value={unit.id} disabled={full}>{unitLabelFor(selectedProperty, unit)}{full ? ` (${locale === "en" ? "full" : "penuh"})` : ` (${activeTenantCount(unit, reservations)}/${unitCapacity(unit)})`}</option>; })}</select></div>
         <div className="form-field full"><label htmlFor="booking-tenant">{t("Penyewa")}</label><select id="booking-tenant" value={tenantId} onChange={event => setTenantId(event.target.value)} required>{tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{String(tenant.nama)}</option>)}</select></div>
         <div className="form-field"><label htmlFor="booking-duration">{t("Durasi")}</label><select id="booking-duration" value={duration} onChange={event => setDuration(event.target.value)}><option>6 bulan</option><option>12 bulan</option><option>24 bulan</option></select></div>
         <div className="form-field"><label htmlFor="booking-rent">{t("Sewa per bulan")}</label><input id="booking-rent" type="number" min="0" step="1000" value={rent} onChange={event => setRent(event.target.value)} required /></div>
@@ -1646,7 +1680,7 @@ function SewainContent() {
       <main className="main" id="main-content">
         {page === "dashboard" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <Dashboard go={go} reservations={reservations} properties={propertyRows} invoices={invoiceRows} tickets={tickets} loading={propertiesLoading || invoicesLoading || tenantsLoading} onLoadDemo={loadDemoData} />)}
         {page === "calendar" && <CalendarPage onOpenEvent={event => go(event.target)} invoices={invoiceRows} reservations={reservations} tickets={tickets} />}
-        {page === "properties" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} loading={propertiesLoading} />)}
+        {page === "properties" && (isErrorState("properties", propertiesLoading) ? <ErrorState onRetry={handleRetry} /> : <PropertiesPage rows={propertyRows} setRows={setPropertyRows} units={units} setUnits={setUnits} invoices={invoiceRows} tickets={tickets} reservations={reservations} onBook={openBooking} onViewReservations={() => go("reservations")} openDialog={setDialog} notify={notify} loading={propertiesLoading} />)}
         {page === "tenants" && (isErrorState("tenants", tenantsLoading) ? <ErrorState onRetry={handleRetry} /> : <TenantsPage rows={tenants} setRows={setTenants} invoices={invoiceRows} documents={documents} openDialog={setDialog} notify={notify} goToProperties={() => go("properties")} loading={tenantsLoading} />)}
         {page === "invoices" && (isErrorState("invoices", invoicesLoading) ? <ErrorState onRetry={handleRetry} /> : <InvoicePage rows={invoiceRows} setRows={setInvoiceRows} openDialog={setDialog} notify={notify} loading={invoicesLoading} />)}
         {page === "expenses" && <ExpensesPage rows={expenseRows} setRows={setExpenseRows} properties={propertyRows} openDialog={setDialog} notify={notify} />}
@@ -1663,7 +1697,7 @@ function SewainContent() {
     </div>
     <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} page={page} navAllowed={navAllowed} canCreate={module => access.can(module, "create")} go={go} openDialog={setDialog} openBooking={openBooking} openRecord={openSearchResult} sources={searchSources} />
     {dialog && <EditDialog state={dialog} onClose={() => setDialog(null)} onSave={save} />}
-    {booking && <BookingDialog ctx={booking} properties={propertyRows} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} setReservations={setReservations} onClose={() => setBooking(null)} onCreated={id => { setFocusReservationId(id); go("reservations"); }} notify={notify} />}
+    {booking && <BookingDialog ctx={booking} properties={propertyRows} units={units} setUnits={setUnits} tenants={tenants} setTenants={setTenants} reservations={reservations} setReservations={setReservations} onClose={() => setBooking(null)} onCreated={id => { setFocusReservationId(id); go("reservations"); }} notify={notify} />}
   </div></AccessContext.Provider></TokenConfigContext.Provider>;
 }
 
