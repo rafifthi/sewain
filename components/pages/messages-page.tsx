@@ -194,7 +194,7 @@ function MessageTemplateEditor({ template, event, onBack, onSave, onDelete }: { 
               </div>
             </div>
             <div className="branch-list">{options.map(option => <div className="branch-item" key={option.label}>
-              <label htmlFor={`branch-${option.label}`}>{L("Jika penyewa memilih", "If the tenant selects")} <strong>"{option.label}"</strong> {L("→ kirim", "→ send")}</label>
+              <label htmlFor={`branch-${option.label}`}>{L("Jika penyewa memilih", "If the tenant selects")} <strong>{`"${option.label}"`}</strong> {L("→ kirim", "→ send")}</label>
               <textarea id={`branch-${option.label}`} rows={3} value={branches[option.label] || ""} onChange={field => setBranch(option.label, field.target.value)} placeholder={L("Pesan balasan untuk pilihan ini…", "Reply message for this option…")} />
             </div>)}{options.length === 0 && <p className="inline-empty">{L("Tambahkan pilihan tombol untuk membuat cabang pesan.", "Add reply buttons to create message branches.")}</p>}</div>
           </div> : <p className="inline-empty">{L("Aktifkan untuk menambahkan tombol pilihan & percabangan pesan (if/else).", "Turn on to add reply buttons and message branching (if/else).")}</p>}
