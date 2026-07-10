@@ -114,9 +114,9 @@ export async function initDb() {
     )
   `);
 
-  for (const module of Object.keys(MODULES)) {
-    if (!isModuleName(module)) continue;
-    for (const ddl of moduleDdl(module, module)) {
+  for (const mod of Object.keys(MODULES)) {
+    if (!isModuleName(mod)) continue;
+    for (const ddl of moduleDdl(mod, mod)) {
       await client.execute(ddl);
     }
   }

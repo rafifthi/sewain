@@ -29,16 +29,16 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     const user = await getSessionUser(req);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const module = resolveModule((await ctx.params).module);
-    if (!module) return NextResponse.json({ error: "Unknown module" }, { status: 404 });
+    const mod = resolveModule((await ctx.params).module);
+    if (!mod) return NextResponse.json({ error: "Unknown module" }, { status: 404 });
 
-    const table = MODULES[module].table;
+    const table = MODULES[mod].table;
     const dbRows = await db()
       .select()
       .from(table)
-      .where(eq(orgIdColumn(module), user.orgId));
+      .where(eq(orgIdColumn(mod), user.orgId));
 
-    return NextResponse.json({ rows: dbRows.map((r) => toUiRow(module, r as Record<string, unknown>)) });
+    return NextResponse.json({ rows: dbRows.map((r) => toUiRow(mod, r as Record<string, unknown>)) });
   } catch (error) {
     console.error("[data GET]", error);
     return NextResponse.json({ error: "Data service unavailable" }, { status: 500 });
@@ -82,8 +82,8 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     const user = await getSessionUser(req);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const module = resolveModule((await ctx.params).module);
-    if (!module) return NextResponse.json({ error: "Unknown module" }, { status: 404 });
+    const mod = resolveModule((await ctx.params).module);
+    if (!mod) return NextResponse.json({ error: "Unknown module" }, { status: 404 });
 
     let body: unknown;
     try {
@@ -97,12 +97,12 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: validated.error }, { status: 400 });
     }
 
-    const table = MODULES[module].table;
+    const table = MODULES[mod].table;
     const now = new Date();
-    const dbRows = validated.rows.map((row) => toDbRow(module, row, user.orgId, now));
+    const dbRows = validated.rows.map((row) => toDbRow(mod, row, user.orgId, now));
 
     await db().transaction(async (tx) => {
-      await tx.delete(table).where(eq(orgIdColumn(module), user.orgId));
+      await tx.delete(table).where(eq(orgIdColumn(mod), user.orgId));
       for (let i = 0; i < dbRows.length; i += INSERT_CHUNK) {
         await tx.insert(table).values(dbRows.slice(i, i + INSERT_CHUNK) as never);
       }
